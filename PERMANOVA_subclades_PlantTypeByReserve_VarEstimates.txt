@@ -1,0 +1,5 @@
+Source	 Estimate	  Sq.root
+V(reserve_code)	8.46E-03	9.20E-02
+V(Plant_type)	8.83E-03	9.40E-02
+V(reserve_codexPlant_type)	8.45E-03	9.19E-02
+V(Res)	2.04E-02	0.14278

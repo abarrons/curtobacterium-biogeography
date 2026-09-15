@@ -1,0 +1,349 @@
+---
+title: "06 — Alpha Diversity"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+library(ggpubr)
+library(scales)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+mg            <- readRDS(here::here("results/rds/mg.rds"))
+mg_rar        <- readRDS(here::here("results/rds/mg_rar.rds"))
+mg_un_curto   <- readRDS(here::here("results/rds/mg_un_curto.rds"))
+metadata      <- readRDS(here::here("results/rds/metadata_final.rds"))
+count_summary <- readRDS(here::here("results/rds/count_summary.rds"))
+clim_vars_PC  <- readRDS(here::here("results/rds/clim_vars_PC.rds"))
+litter_vars   <- readRDS(here::here("results/rds/litter_vars.rds"))
+```
+
+### Alpha Diversity Plots
+
+```{r alpha-diversity, fig.width=30, fig.height=14, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+curto_unrar_otutab <- as.data.frame(t(mg_un_curto@otu_table))
+
+alpha_diversity_table <- calc_alpha_diversity(
+  otu_table      = curto_unrar_otutab,
+  n_iterations   = 100,
+  sequence_depth = 1900,
+  set_seed       = 711
+)
+
+curto_divdf <- cbind(alpha_diversity_table, mg_rar@sam_data)
+
+mean(curto_divdf$Richness)
+sd(curto_divdf$Richness)
+sd(curto_divdf$Richness) / sqrt(length(curto_divdf$Richness))
+
+curto_shan <- ggplot(data = curto_divdf, aes(x = Litter_type, y = Shannon, fill = Litter_type)) +
+  geom_boxplot() + geom_point(position = position_jitterdodge()) +
+  facet_grid(~ reserve_code, scale = "free", space = "free_x") +
+  scale_fill_manual(values = colors, name = "Litter type") +
+  xlab("Litter type") + ggtitle("Alpha diversity for Curtobacterium strains in Leaf litter") +
+  apatheme +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+print(curto_shan)
+
+curto_shan_EcosysPT <- ggplot(data = curto_divdf, aes(x = Plant_type, y = Shannon, fill = Plant_type)) +
+  geom_boxplot() + geom_point(position = position_jitterdodge()) +
+  facet_grid(~ Ecosystem, scale = "free", space = "free_x") +
+  scale_fill_manual(values = colors, name = "Litter type") +
+  xlab("Litter type") + ggtitle("Alpha diversity for Curtobacterium strains in Leaf litter") +
+  apatheme +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+print(curto_shan_EcosysPT)
+
+hist(curto_divdf$Shannon)
+
+# ANOVA
+shann_anova   <- car::Anova(aov(Shannon ~ Ecosystem + Plant_type,   data = curto_divdf), type = "III")
+shann_anova
+shann_anova_2 <- car::Anova(aov(Shannon ~ Ecosystem * Litter_type,  data = curto_divdf), type = "III")
+shann_anova_2
+
+# Shannon vs environmental variables
+for (variable in colnames(curto_divdf)[c(6:25, 36:40)]) {
+  curto_shann_VS_vars_plot <- ggplot(data = curto_divdf,
+                                     aes(x = !!sym(variable), y = Shannon, color = Litter_type)) +
+    geom_smooth(aes(color = Litter_type), method = "lm") +
+    stat_regline_equation(aes(label = paste(..adj.rr.label.., sep = "~~~~")),
+                          position = "jitter", label.y = Inf) +
+    geom_point(size = 4) +
+    labs(y = "Shannon diversity index") +
+    apatheme + theme(text = element_text(size = 16))
+  print(curto_shann_VS_vars_plot)
+  ggsave(filename = paste(here::here("plots/linear_regression/shannon_curto_Ab_vs"),
+                          variable, "png", sep = "."),
+         width = 30, height = 20, units = "cm", dpi = 320)
+}
+
+# PDP with alpha diversity (strain level)
+curto_divdf <- curto_divdf |>
+  rownames_to_column("SampleID") |>
+  left_join(count_summary |> dplyr::select(c(SampleID, starts_with("PC"))), by = "SampleID")
+
+set.seed(711)
+shannon_res <- cached(here::here("cache/shannon_res.rds"), {
+  run_rf_analysis(
+    df           = curto_divdf,
+    response_var = "Shannon",
+    predictors   = c(clim_vars_PC, litter_vars),
+    ntree = 1000, cv_folds = 10, nperm_oob = 1000, nrep_vi = 500, n_boot = 100, grid.size = 20)
+})
+
+shannon_res$rf_full; shannon_res$oob_error; shannon_res$A3_res
+shannon_res$summary_table; shannon_res$pval_cv
+
+write.table(shannon_res$summary_table,
+            file = here::here("plots/RF_validation_shannon.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+plots_rf_shann <- generate_plots(
+  imp_results_rf = shannon_res$imp_results_rf, pdp_ci_df = shannon_res$pdp_ci_df,
+  rug = shannon_res$rug, clim_vars_PC, litter_vars, allvars_pallete,
+  cv_r2 = shannon_res$CV_r2, apatheme, pval_cv = shannon_res$pval_cv,
+  sig_vars = shannon_res$sig_vars_rfp, response_label = "Shannon")
+
+shannon_PDP_CIs <- plots_rf_shann$pdp_plot_rf + scale_y_continuous()
+shannon_PDP_imp <- plots_rf_shann$imp_plot_pdp_rf + scale_x_continuous()
+
+curto_Shann_PDP_plot <- ggarrange(shannon_PDP_CIs, shannon_PDP_imp,
+                                  labels = "AUTO", ncol = 2, common.legend = F,
+                                  widths = c(1.75, 0.65), hjust = -0.2)
+print(curto_Shann_PDP_plot)
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_ShannonDiv_clim_litt_vars_Sig_varsCIs.png"),
+       width = 250, height = 100, units = "mm", dpi = 300, device = "png", type = "cairo-png")
+
+#### Alpha diversity at the subclade level ####
+
+subclades_unrar_otutab <- tax_glom(mg_un_curto, taxrank = "subclade")
+subclades_unrar_otutab <- as.data.frame(t(subclades_unrar_otutab@otu_table))
+
+alpha_diversity_table_sub <- calc_alpha_diversity(
+  otu_table = subclades_unrar_otutab, n_iterations = 100, sequence_depth = 1900, set_seed = 711)
+
+subclades_divdf <- cbind(alpha_diversity_table_sub, mg_rar@sam_data)
+
+curto_shan_sub <- ggplot(data = subclades_divdf, aes(x = Litter_type, y = Shannon, fill = Litter_type)) +
+  geom_boxplot() + geom_point(position = position_jitterdodge()) +
+  facet_grid(~ reserve_code, scale = "free", space = "free_x") +
+  scale_fill_manual(values = colors, name = "Litter type") + xlab("Litter type") +
+  ggtitle("Alpha diversity for Curtobacterium Subclades in Leaf litter") +
+  apatheme +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+print(curto_shan_sub)
+
+curto_shan_EcosysPT_sub <- ggplot(data = subclades_divdf, aes(x = Plant_type, y = Shannon, fill = Plant_type)) +
+  geom_boxplot() + geom_point(position = position_jitterdodge()) +
+  facet_grid(~ Ecosystem, scale = "free", space = "free_x") +
+  scale_fill_manual(values = colors, name = "Litter type") + xlab("Litter type") +
+  ggtitle("Alpha diversity for Curtobacterium strains in Leaf litter") +
+  apatheme +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+print(curto_shan_EcosysPT_sub)
+
+shann_anova_sub   <- car::Anova(aov(Shannon ~ Ecosystem + Plant_type,  data = subclades_divdf), type = "III")
+shann_anova_sub
+shann_anova_2_sub <- car::Anova(aov(Shannon ~ Ecosystem * Litter_type, data = subclades_divdf), type = "III")
+shann_anova_2_sub
+
+for (variable in colnames(subclades_divdf)[c(6:25, 36:40)]) {
+  curto_shann_VS_vars_plot <- ggplot(data = curto_divdf,
+                                     aes(x = !!sym(variable), y = Shannon, color = Litter_type)) +
+    geom_smooth(aes(color = Litter_type), method = "lm") +
+    stat_regline_equation(aes(label = paste(..adj.rr.label.., sep = "~~~~")),
+                          position = "jitter", label.y = Inf) +
+    geom_point(size = 4) + labs(y = "Shannon diversity index") +
+    apatheme + theme(text = element_text(size = 16))
+  print(curto_shann_VS_vars_plot)
+  ggsave(filename = paste(here::here("plots/linear_regression/shannon_curto_subclades_vs"),
+                          variable, "png", sep = "."),
+         width = 30, height = 20, units = "cm", dpi = 320)
+}
+
+subclades_divdf <- subclades_divdf |>
+  rownames_to_column("SampleID") |>
+  left_join(count_summary |> dplyr::select(c(SampleID, starts_with("PC"))), by = "SampleID")
+
+set.seed(711)
+shannon_res_sub <- cached(here::here("cache/shannon_res_sub.rds"), {
+  run_rf_analysis(
+    df = subclades_divdf, response_var = "Shannon",
+    predictors = c(clim_vars_PC, litter_vars),
+    ntree = 1000, cv_folds = 10, nperm_oob = 1000, nrep_vi = 500, n_boot = 100, grid.size = 20)
+})
+
+shannon_res_sub$rf_full; shannon_res_sub$oob_error; shannon_res_sub$A3_res
+shannon_res_sub$summary_table; shannon_res_sub$pval_cv
+
+write.table(shannon_res_sub$summary_table,
+            file = here::here("plots/RF_validation_shannon_subclades.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+plots_rf_shann_sub <- generate_plots(
+  imp_results_rf = shannon_res_sub$imp_results_rf, pdp_ci_df = shannon_res_sub$pdp_ci_df,
+  rug = shannon_res_sub$rug, clim_vars_PC, litter_vars, allvars_pallete,
+  cv_r2 = shannon_res_sub$CV_r2, apatheme, pval_cv = shannon_res_sub$pval_cv,
+  sig_vars = shannon_res_sub$sig_vars_rfp, response_label = "Shannon")
+
+shannon_PDP_CIs_sub <- plots_rf_shann_sub$pdp_plot_rf + scale_y_continuous()
+shannon_PDP_imp_sub <- plots_rf_shann_sub$imp_plot_pdp_rf + scale_x_continuous()
+
+curto_Shann_PDP_plot_sub <- ggarrange(shannon_PDP_CIs_sub, shannon_PDP_imp_sub,
+                                      labels = "AUTO", ncol = 2, common.legend = F,
+                                      widths = c(1.75, 0.65), hjust = -0.2)
+print(curto_Shann_PDP_plot_sub)
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_ShannonDiv_Subclades_clim_litt_vars_Sig_varsCIs.png"),
+       width = 250, height = 100, units = "mm", dpi = 300, device = "png", type = "cairo-png")
+```
+
+#### GLM — Shannon diversity (strain level)
+
+```{r glm-shannon-strain, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+shannon_glm_res <- cached(here::here("cache/shannon_glm_res.rds"), {
+  run_glm_analysis(
+    df           = curto_divdf,
+    response_var = "Shannon",
+    predictors   = c(clim_vars_PC, litter_vars),
+    cv_folds = 10, nrep_vi = 500, n_boot = 100, grid.size = 20)
+})
+
+shannon_glm_res$summary_table
+
+write.table(shannon_glm_res$summary_table,
+            file = here::here("plots/GLM_validation_shannon.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+plots_glm_shann <- generate_plots(
+  imp_results_rf = shannon_glm_res$imp_results_rf,
+  pdp_ci_df      = shannon_glm_res$pdp_ci_df,
+  rug            = shannon_glm_res$rug,
+  clim_vars_PC, litter_vars, allvars_pallete, apatheme,
+  cv_r2          = shannon_glm_res$CV_r2,
+  pval_cv        = shannon_glm_res$pval_cv,
+  sig_vars       = shannon_glm_res$sig_vars_rfp,
+  response_label = "Shannon")
+
+shannon_GLM_PDP_CIs <- plots_glm_shann$pdp_plot_rf + scale_y_continuous()
+shannon_GLM_PDP_imp <- plots_glm_shann$imp_plot_pdp_rf + scale_x_continuous()
+
+curto_Shann_GLM_plot <- ggarrange(shannon_GLM_PDP_CIs, shannon_GLM_PDP_imp,
+                                  labels = "AUTO", ncol = 2, common.legend = F,
+                                  widths = c(1.75, 0.65), hjust = -0.2)
+print(curto_Shann_GLM_plot)
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_ShannonDiv_clim_litt_vars_Sig_varsCIs.png"),
+       plot = curto_Shann_GLM_plot,
+       width = 250, height = 100, units = "mm", dpi = 300, device = "png", type = "cairo-png")
+```
+
+#### GLM — Shannon diversity (subclade level)
+
+```{r glm-shannon-subclades, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+shannon_glm_res_sub <- cached(here::here("cache/shannon_glm_res_sub.rds"), {
+  run_glm_analysis(
+    df           = subclades_divdf,
+    response_var = "Shannon",
+    predictors   = c(clim_vars_PC, litter_vars),
+    cv_folds = 10, nrep_vi = 500, n_boot = 100, grid.size = 20)
+})
+
+shannon_glm_res_sub$summary_table
+
+write.table(shannon_glm_res_sub$summary_table,
+            file = here::here("plots/GLM_validation_shannon_subclades.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+plots_glm_shann_sub <- generate_plots(
+  imp_results_rf = shannon_glm_res_sub$imp_results_rf,
+  pdp_ci_df      = shannon_glm_res_sub$pdp_ci_df,
+  rug            = shannon_glm_res_sub$rug,
+  clim_vars_PC, litter_vars, allvars_pallete, apatheme,
+  cv_r2          = shannon_glm_res_sub$CV_r2,
+  pval_cv        = shannon_glm_res_sub$pval_cv,
+  sig_vars       = shannon_glm_res_sub$sig_vars_rfp,
+  response_label = "Shannon")
+
+shannon_GLM_PDP_CIs_sub <- plots_glm_shann_sub$pdp_plot_rf + scale_y_continuous()
+shannon_GLM_PDP_imp_sub <- plots_glm_shann_sub$imp_plot_pdp_rf + scale_x_continuous()
+
+curto_Shann_GLM_plot_sub <- ggarrange(shannon_GLM_PDP_CIs_sub, shannon_GLM_PDP_imp_sub,
+                                      labels = "AUTO", ncol = 2, common.legend = F,
+                                      widths = c(1.75, 0.65), hjust = -0.2)
+print(curto_Shann_GLM_plot_sub)
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_ShannonDiv_Subclades_clim_litt_vars_Sig_varsCIs.png"),
+       plot = curto_Shann_GLM_plot_sub,
+       width = 250, height = 100, units = "mm", dpi = 300, device = "png", type = "cairo-png")
+```
+
+##### Combined figure of PDPs for Relative abundance and Shannon diversity
+
+```{r combined-pdp-ra-shannon}
+final_RA_RF <- plots_rf_ra$pdp_plot_rf
+final_RA_RF$layers <- final_RA_RF$layers[
+  !sapply(plots_rf_ra$pdp_plot_rf$layers, function(l) inherits(l$geom, "GeomRug"))]
+final_RA_RF
+
+m_pdp <- ggplot2::margin(0, 12, 0, 0)   # right gap after PDP panels
+m_imp <- ggplot2::margin(0,  0, 0, 12)  # left gap before importance panels
+
+p1 <- final_RA_RF +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank(),
+        axis.text.y = element_text(size = 10), axis.title.y = element_text(size = 10),
+        axis.line.x = element_blank(), plot.margin = m_pdp, panel.spacing = unit(0.3, "lines"),
+        legend.position = "none")
+
+p2 <- plots_rf_ra$imp_plot_pdp_rf +
+  theme(axis.title.x = element_blank(), plot.margin = m_imp, panel.spacing = unit(0.3, "lines"),
+        legend.position = "none") +
+  labs(tag = NULL)
+
+p3 <- shannon_PDP_CIs +
+  theme(strip.background = element_blank(), strip.text = element_blank(),
+        axis.text.x = element_text(size = 7.5), legend.position = "none",
+        axis.text.y = element_text(size = 10), axis.title.y = element_text(size = 10),
+        plot.margin = m_pdp, panel.spacing = unit(0.3, "lines"))
+
+p4 <- shannon_PDP_imp +
+  theme(plot.margin = m_imp, panel.spacing = unit(0.3, "lines")) + labs(tag = NULL)
+
+aligned <- cowplot::align_plots(p1, p2, p3, p4, align = "hv", axis = "l")
+cowplot::plot_grid(plotlist = aligned, ncol = 2, rel_widths = c(2, 1),
+                   rel_heights = c(1, 1.1), labels = "AUTO")
+
+cowplot::ggsave2(
+  filename = here::here("plots/plots_pdp/pdp_plot_rf_RelAb_ShannonDiv_Subclades_clim_litt_vars_Sig_varsCIs_combined.png"),
+  width = 280, height = 120, units = "mm", dpi = 300, device = "png",
+  type = "cairo-png", bg = "white")
+```
+
+```{r save-rds, include=FALSE}
+saveRDS(curto_divdf,     here::here("results/rds/curto_divdf.rds"))
+saveRDS(subclades_divdf, here::here("results/rds/subclades_divdf.rds"))
+```

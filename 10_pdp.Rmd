@@ -1,0 +1,2964 @@
+---
+title: "10 — Partial Dependence Plots"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(iml)
+library(randomForest)
+library(rfPermute)
+library(A3)
+library(caret)
+library(ggpubr)
+library(scales)
+library(ggh4x)
+library(reshape2)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+clades_Ab_md       <- readRDS(here::here("results/rds/clades_Ab_md.rds"))
+subclades_Ab_md    <- readRDS(here::here("results/rds/subclades_Ab_md.rds"))
+clim_vars_PC       <- readRDS(here::here("results/rds/clim_vars_PC.rds"))
+litter_vars        <- readRDS(here::here("results/rds/litter_vars.rds"))
+subclade_colors_bp <- readRDS(here::here("results/rds/subclade_colors_bp.rds"))
+subclade_colros    <- readRDS(here::here("results/rds/subclade_colros.rds"))
+clade_colors       <- readRDS(here::here("results/rds/clade_colors.rds"))
+correct_order      <- readRDS(here::here("results/rds/correct_order.rds"))
+count_summary      <- readRDS(here::here("results/rds/count_summary.rds"))
+pcadf_expanded     <- readRDS(here::here("results/rds/pcadf_expanded.rds"))
+```
+
+#### Partial dependance plots
+
+#### Partial dependance plots
+
+##### PDP clade level with Random Forest model
+
+```{r pdp-clades-rf, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20,}
+library(iml)
+library(randomForest)
+set.seed(711)
+
+# Set up an output directory to save the plots
+output_dir <- here::here("plots/plots_pdp")
+#dir.create(output_dir, showWarnings = FALSE)
+
+## add PCs from PCAs for litter chem, climate and all variables
+
+
+clim_vars <- #gsub("\\.", " ",
+                  c("MAT",
+              "MAP",
+              "P.Seas",
+              "P.WarmQ",
+              "T.Iso",
+              "T.Diurn",
+              "T.MinColdMo",
+              "T.DryQ",
+              "P.DryMo")#)
+
+clim_vars_PC <- c("PC1.clim",
+              "PC2.clim")
+
+litter_vars <- c("pH", "crude_protein", "cellulose", "hemicellulose", "lignin")
+
+litter_vars_PC <- c("PC1.litt", "PC2.litt")
+
+#all_vars_PC <- c("PC1.all.vars", "PC2.all.vars")
+
+### let's prepare also a pallete with spaces on the names of the variables
+
+allvars_pallete_5 <- allvars_pallete
+
+names(allvars_pallete_5) <- gsub("_", " ", names(allvars_pallete_5))
+
+
+# Replace spaces with underscores in column names
+colnames(clades_Ab_md) <- gsub(" ", ".", colnames(clades_Ab_md))
+
+
+## climate PCs and litter variables
+
+#initialize empty data frames to store results
+imp_results <- data.frame()
+effs_results <- data.frame()
+
+#Set a loop to go over each clade
+for (clade in unique(clades_Ab_md$Clade)) {
+  #Set a loop to go over each type of litter
+  #for (litter in unique(clades_Ab_md$Litter_type)) {
+    #subset for each clade and each type of litter
+    pdp_temp <- clades_Ab_md %>%
+      filter(Clade == clade# & Litter_type == litter
+                                ) %>%
+      ungroup() %>%
+      dplyr::select(-c(Row.names, reserve_code, Litter_type, Clade)) |>
+      dplyr::select(all_of(c(litter_vars, clim_vars_PC)), Abundance)
+    #create a random forest for each subseted dataset
+    rf <- randomForest(Abundance ~., data = pdp_temp, ntree = 1000)
+    #get the variables for Abundace prediction
+    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
+    #set model variables for prediction of Abundance
+    predictor <- Predictor$new(rf, data = X, y = pdp_temp$Abundance)
+    #obtain importance of varibles in the model
+    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
+    
+    #store importance results into a data frame and add clade and litter type information
+    imp_temp <-imp$results
+    imp_temp$Clade <- clade
+    #imp_temp$Litter_type <- litter
+    
+    imp_results <- rbind(imp_results, imp_temp)
+    
+    #calculate predictions
+    effs <- FeatureEffects$new(predictor, grid.size = 20, method = "pdp")
+    effs_temp <- do.call(rbind, effs$results)
+    effs_temp$Clade <- clade
+    #effs_temp$Litter_type <- litter
+   
+    effs_results <- rbind(effs_results, effs_temp)
+    
+    rug <- X
+    #object_name <- paste("rug", litter, sep = "_")
+    #assign(object_name, X)
+  #}
+}
+
+
+clade_results <- cached(here::here("cache/clade_results.rds"), {
+  res_list <- list()
+  for (clade in unique(clades_Ab_md$Clade)) {
+    message("Processing clade: ", clade)
+    df_cl <- clades_Ab_md %>%
+      filter(Clade == clade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_PC))) %>%
+      na.omit()
+    res <- run_rf_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_PC),
+      ntree        = 1000, cv_folds = 10, nperm_oob = 500,
+      nrep_vi      = 500, n_boot = 100, grid.size = 20)
+    str(res$imp_results_rf)
+    res$summary_table$Clade  <- clade
+    res$pdp_ci_df$Clade      <- clade
+    res$imp_results_rf$Clade <- clade
+    res$rf_cv$results$Clade  <- clade
+    res_list[[clade]] <- res
+  }
+  res_list
+})
+
+# Now: combine into single tables
+
+# (a) Combined summary of overall metrics:
+all_summaries <- bind_rows(
+  lapply(clade_results, `[[`, "summary_table")
+)
+
+# (b) Combined PDP+CI for all clades:
+all_pdp_ci <- bind_rows(
+  lapply(clade_results, `[[`, "pdp_ci_df")
+)
+
+# (c) Combined iml importances:
+all_imp <- bind_rows(
+  lapply(clade_results, `[[`, "imp_results_rf")
+)
+
+# (d) Combined CV results (if you like):
+all_cv <- bind_rows(
+  lapply(clade_results, function(x) x$rf_cv$results)
+)
+
+
+# Make a tibble with one row per clade‐feature pair
+sig_lookup <- map_dfr(
+  .x   = names(clade_results),
+  .f   = function(cl) {
+    tibble(
+      Clade   = cl,
+      feature = clade_results[[cl]]$sig_vars_rfp
+    )
+  }
+)
+
+
+write.table(all_summaries, file = here::here("plots/RF_validation_clades.csv"), quote = F, row.names = F, col.names = T, sep = ",")
+
+
+all_imp_sig    <- all_imp    %>% semi_join(sig_lookup, by = c("Clade", "feature"))
+#all_pdp_ci_sig <- all_pdp_ci %>% semi_join(sig_lookup, by = c("Clade", "feature"))
+
+# And so on…  
+# You can now plot or write out any of these combined tables:
+
+print(all_summaries)
+print(all_imp)
+#print(all_pdp_ci)
+
+
+# 0) define your clean, recoded, ordered feature vector
+feature_levels <- c("PC1","PC2","lignin","cellulose","hemicellulose","crude protein","pH")
+feature_levels_imp <- c("PC1","PC2","lignin","cellulose","hemicellulose","crude protein","pH")
+# Palette with PC keys renamed to match post-recode feature names
+allvars_pallete_imp <- c(
+  allvars_pallete_2[!names(allvars_pallete_2) %in% c("PC1 clim", "PC2 clim")],
+  "PC1" = unname(allvars_pallete_2["PC1 clim"]),
+  "PC2" = unname(allvars_pallete_2["PC2 clim"])
+)
+
+# Subclade -> clade groupings, derived from the subclade IDs
+# (each subclade is its clade's Roman numeral plus an uppercase suffix, e.g. IIIA -> III)
+.all_subclades   <- sort(unique(subclades_Ab_md$Subclade))
+.subclade_clade  <- gsub("[^IV]+$", "", .all_subclades)
+clade_I_subclades   <- .all_subclades[.subclade_clade == "I"]
+clade_II_subclades  <- .all_subclades[.subclade_clade == "II"]
+clade_III_subclades <- .all_subclades[.subclade_clade == "III"]
+clade_IV_subclades  <- .all_subclades[.subclade_clade == "IV"]
+clade_V_subclades   <- .all_subclades[.subclade_clade == "V"]
+
+
+# 1) Re‐mutate `all_imp_sig` so that its `feature` column is exactly one of those names:
+all_imp_sig <- all_imp_sig %>%
+  mutate(
+    # 1a) Remove dots or underscores and recode the climate PCs
+    feature = gsub("[._]", " ", feature),
+    feature = dplyr::recode(feature,
+      `PC1 clim` = "PC1",
+      `PC2 clim` = "PC2"
+    ),
+    # 1b) Also make sure “crude_protein” → “crude protein” exactly
+    feature = if_else(feature == "crude protein" | feature == "crude_protein", 
+                      "crude protein", feature)
+    )
+
+# 2) compute finite coords *after* recoding + factoring features
+pos_df_clade <- all_imp_sig %>%
+  group_by(Clade) %>%
+  reframe(
+    x = max(importance, na.rm = TRUE) * 1.05,
+    y = n() + 0.3           # 0.3 units above the topmost point
+  )
+
+# 3) Re‐factor `feature` using the clean `feature_levels`
+#all_imp_sig <- all_imp_sig %>%
+#  mutate(
+#    feature = factor(feature, levels = feature_levels)
+#  )
+
+
+
+# 1) extract per‐clade CV R² & p‐value
+annot_df_clade <- all_summaries %>%
+  filter(Metric %in% c("10-fold CV R²", "Permuted CV p-value")) %>%
+  dplyr::select(Clade, Metric, Value) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  dplyr::rename(
+    CV_R2    = `10-fold CV R²`,
+    P_val    = `Permuted CV p-value`
+  ) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0(
+      "atop(",
+        "CV~R^2==", round(CV_R2, 3), ",",
+        "italic(P)<", format.pval(P_num, digits=2, eps = 1e-3),
+      ")"
+    )
+  )
+
+
+
+annot_df_clade <- annot_df_clade %>% left_join(pos_df_clade, by="Clade") |>
+  dplyr::filter(!Clade %in% c("V", "UND"))
+
+
+
+imp_plot_pdp_rf_clades <- all_imp_sig %>%
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars ~ "Litter chemistry",
+                              TRUE ~ "All"),
+         Clade = factor(Clade, levels = c("I", "II", "III", "IV", "V", "UND"))) |> 
+  dplyr::filter(Clade != "UND") |> 
+  mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  #scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
+  scale_color_manual(values = allvars_pallete_imp,
+                     labels = c(PC1 = "PC1 clim", PC2 = "PC2 clim"),
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(c("PC1", "PC2", "lignin", "cellulose", "hemicellulose", "crude protein", "pH"))) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  #facet_grid(Clade~., scales = "free_y", space = "free_y") +
+  ggh4x::facet_grid2(Clade ~ ., scales = "free_y", space = "free_y",
+                       strip = ggh4x::strip_themed(
+                         background_y = ggh4x::elem_list_rect(
+                           fill = clade_colors[-5] # one color per Clade
+                         )
+                       )) +
+  geom_point(position = position_dodge(width = 0.4), size = 2.5) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.4),
+                 height = 0,
+                 linewidth = 1.5) +
+ geom_text(
+    data        = annot_df_clade,
+    aes(x = 0.03, y = 1, label = expr),
+    parse       = TRUE,
+    inherit.aes = FALSE,
+    hjust       = 0,      # 0 = flush against the right edge since x is already max*1.05
+    vjust       = 0,      # 0 = flush above the top bar
+    size        = 3
+  ) +
+  apatheme +
+  theme(#strip.background = element_rect(fill = NA, colour = "black"),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.line.y = element_blank(),
+        strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+    panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+    legend.spacing = unit(0.1, "cm"),  
+    legend.key.size = unit(0.3, "cm"),
+    legend.margin = ggplot2::margin(0, 0, 0, 0),
+    legend.text = element_text(size = 9),
+    legend.position = "bottom")
+
+print(imp_plot_pdp_rf_clades)
+
+# prepare rug data
+rug_all <- reshape2::melt(clade_results$I$rug) %>%
+  #filter(variable %in% unique(sig_lookup$feature)) |>
+  #filter(variable %in% clim_vars) |>
+  #filter(.feature %in% clim_vars) %>%
+  #dplyr::rename(variable = .feature) #%>%
+  dplyr::rename(feature = variable) |>
+  mutate(var_type = case_when(
+    feature %in% c(clim_vars_PC, clim_vars) ~ "Climate",
+    feature %in% c(litter_vars, litter_vars_PC) ~ "Litter chemistry",
+    TRUE ~ NA
+  )) |>
+  mutate(feature = gsub("[._]", " ", feature)) |>
+  mutate(feature = dplyr::recode(feature,
+                       `PC1 clim` = "PC1",
+                       `PC2 clim` = "PC2")) |>
+  mutate(feature = factor(feature, levels = feature_levels))
+
+
+    
+
+pdp_plot_ci_clades <- all_pdp_ci %>%
+    # 1) classify each feature
+    mutate(
+      var_type = case_when(
+        feature %in% clim_vars_PC  ~ "Climate",
+        feature %in% litter_vars   ~ "Litter chemistry",
+        TRUE                        ~ NA_character_
+      )) |>
+    mutate(var_type = factor(var_type ,levels = c("Climate", "Litter chemistry"))) |>
+  
+      # 2) clean up any underscores
+    mutate(
+      feature = gsub("[_.]", " ", feature)) |> 
+  
+      # 3) optionally recode the feature names
+      mutate(
+        feature = dplyr::recode(feature,
+                       `PC1 clim` = "PC1",
+                       `PC2 clim` = "PC2")) |>
+      mutate(feature = factor(feature, levels = feature_levels)
+           ) |> 
+      # 4) Optionally remove "UND" (undefined) clade
+      dplyr::filter(!Clade %in% c("UND", "V")) |> 
+  
+    # 4) Generate plot
+    ggplot(aes(x = value, y = mean_pred, color = Clade, linetype = significant)) +
+    
+      # 4) ribbon + line
+      #geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = feature), alpha = 0.2, colour = NA) +
+      geom_line(size = 1) +
+    
+      # 5) percent y-axis
+      scale_y_continuous(labels = percent_format(scale = 100)) +
+    
+      # 6) match your custom palette
+      scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "UND")) +
+      #scale_fill_manual(values = allvars_pallete) +
+      scale_linetype_manual(name = NULL,
+                            #name = expression(italic("P")),
+                            values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                            labels = c(expression(P > 0.05),                      # math‐style labels
+                                       expression(P < 0.05))) +
+    
+      # 7) show raw data distribution on the x-axis
+      geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = FALSE) +
+    
+      # 8) nested facets by type + feature
+      ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+    
+      # 9) labels
+      labs(
+        x     = "Variable value",
+        y     = paste("Predicted relative abundance")
+      ) +
+    
+      # 10) drop the legend (we encode feature in the facet strip)
+      guides(color = "none",
+             fill = "none",
+             linetype = guide_legend(order = 1,
+                        override.aes = list(size = 1))
+                        ) +
+    
+      # 11) your custom theme + tweaks
+      apatheme +
+      theme(
+        axis.title.y    = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y     = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text      = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text            = element_text(size = 10),
+        # position legend inside top-left of each panel
+        legend.position     = c(0.02, 0.98),
+        legend.justification = c(0, 1),
+        legend.background   = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size     = unit(0.3, "cm"),
+        legend.text         = element_text(size = 6),
+        legend.key.width = unit(1, "cm"),   # give more horizontal room for the dash
+        legend.key.height= unit(0.5, "cm"),
+        legend.title = element_text(size = 8)
+      )
+
+print(pdp_plot_ci_clades)
+
+
+
+ggarrange(pdp_plot_ci_clades, imp_plot_pdp_rf_clades,
+          labels = "AUTO",
+          ncol = 2,
+          common.legend = F,
+          legend = "bottom",
+          widths = c(1.5, 0.5),
+          hjust = -0.05, vjust = 1)
+
+width <- 240
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_clades_PCclim_litt_vars.png"),
+       width =  width,
+       height = width*0.5,
+       units = "mm",
+       dpi = 300)
+
+
+
+
+```
+
+##### PDP clade level with generalized linear model model
+
+```{r pdp-clades-glm, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20,}
+set.seed(711)
+
+# Set up an output directory to save the plots
+output_dir <- here::here("plots/plots_glm_pdp")
+#dir.create(output_dir, showWarnings = FALSE)
+ 
+#initialize empty data frames to store results
+imp_results <- data.frame()
+effs_results <- data.frame()
+
+#Set a loop to go over each clade
+for (clade in unique(clades_Ab_md$Clade)) {
+  #Set a loop to go over each type of litter
+  #for (litter in unique(clades_Ab_md$Litter_type)) {
+    #subset for each clade and each type of litter
+    pdp_temp <- clades_Ab_md %>%
+      filter(Clade == clade #& Litter_type == litter
+                                ) %>%
+      ungroup() %>%
+      dplyr::select(-c(Row.names, reserve_code, Litter_type, Clade)) |>
+      dplyr::select(all_of(c(litter_vars, clim_vars_PC)), Abundance)
+    #create a GLM for each subseted dataset
+    glm.mod <- glm(Abundance ~., data = pdp_temp)
+    #get the variables for Abundace prediction
+    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
+    #set model variables for prediction of Abundance
+    predictor <- Predictor$new(glm.mod, data = X, y = pdp_temp$Abundance)
+    #obtain importance of varibles in the model
+    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
+    
+    #store importance results into a data frame and add clade and litter type information
+    imp_temp <-imp$results
+    imp_temp$Clade <- clade
+    #imp_temp$Litter_type <- litter
+    
+    imp_results <- rbind(imp_results, imp_temp)
+    
+    #calculate predictions
+    effs <- FeatureEffects$new(predictor, grid.size = 50, method = "pdp")
+    effs_temp <- do.call(rbind, effs$results)
+    effs_temp$Clade <- clade
+    #effs_temp$Litter_type <- litter
+   
+    effs_results <- rbind(effs_results, effs_temp)
+  #}
+}
+
+imp_plot_pdp_glm <- imp_results %>%
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars ~ "Litter chem.",
+                              TRUE ~ "All")) |>
+  mutate(feature = gsub("\\.", " ", feature)) %>%
+    ggplot(aes(x = importance, y = feature, color = Clade)) +
+    scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
+    facet_grid(var_type~., scales = "free_y", space = "free_y") +
+    geom_point(position = position_dodge(width = 0.4), size = 3) +
+    geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                   position = position_dodge(width = 0.4),
+                   height = 0,
+                   linewidth = 1.5) +
+  apatheme +
+  theme(text = element_text(size = 20),
+    strip.background = element_rect(fill = NA, colour = "black"),
+                                                            strip.text = element_text(size = 10),
+                                                            panel.grid.major.x = element_line(colour = "grey90"))
+print(imp_plot_pdp_glm)
+
+pdp_plot_glm <- effs_results %>%
+  mutate(var_type = case_when(.feature %in% clim_vars_PC ~ "Climate",
+                              .feature %in% litter_vars ~ "Litter chem.",
+                              TRUE ~ NA)) |>
+  mutate(.feature = gsub("\\.", " ", .feature)) %>%
+  ggplot(aes(x = .borders, y = .value, color = Clade)) +
+  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
+  scale_y_continuous(labels = scales::percent_format(scale = 0.1)) +
+  geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = F) +
+  #geom_rug(data = rug_G, aes(x = value), sides = "b", inherit.aes = F) +
+  #facet_grid(Litter_type~.feature, scales = "free_x") +
+  ggh4x::facet_nested(~var_type + .feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  geom_line(linewidth = 1) +
+  apatheme +
+  theme(text = element_text(size = 18),
+    strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"))
+
+print(pdp_plot_glm)
+
+ggarrange(pdp_plot_glm, imp_plot_pdp_glm,
+          labels = "AUTO",
+          ncol = 2,
+          common.legend = T,
+          legend = "bottom",
+          widths = c(1, 0.5))
+
+ggsave(filename = here::here("plots_glm_pdp/pdp_plot_glm_clades.png"),
+       width =  65,
+       height = 25,
+       units = "cm",
+       dpi = 320)
+
+
+##### climate PCs
+
+
+#initialize empty data frames to store results
+imp_results <- data.frame()
+effs_results <- data.frame()
+
+#Set a loop to go over each clade
+for (clade in unique(clades_Ab_md$Clade)) {
+  #Set a loop to go over each type of litter
+  #for (litter in unique(clades_Ab_md$Litter_type)) {
+    #subset for each clade and each type of litter
+    pdp_temp <- clades_Ab_md %>%
+      filter(Clade == clade #& Litter_type == litter
+                                ) %>%
+      ungroup() %>%
+      dplyr::select(Abundance, PC1.clim, PC2.clim)
+    #create a GLM for each subseted dataset
+    glm.mod <- glm(Abundance ~., data = pdp_temp)
+    #get the variables for Abundace prediction
+    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
+    #set model variables for prediction of Abundance
+    predictor <- Predictor$new(glm.mod, data = X, y = pdp_temp$Abundance)
+    #obtain importance of varibles in the model
+    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
+    
+    #store importance results into a data frame and add clade and litter type information
+    imp_temp <-imp$results
+    imp_temp$Clade <- clade
+    #imp_temp$Litter_type <- litter
+    
+    imp_results <- rbind(imp_results, imp_temp)
+    
+    #calculate predictions
+    effs <- FeatureEffects$new(predictor, grid.size = 50, method = "pdp")
+    effs_temp <- do.call(rbind, effs$results)
+    effs_temp$Clade <- clade
+    #effs_temp$Litter_type <- litter
+   
+    effs_results <- rbind(effs_results, effs_temp)
+    
+    rug <- X
+    #object_name <- paste("rug", litter, sep = "_")
+    #assign(object_name, X)
+  #}
+}
+
+rug_pca<- reshape2::melt(rug) %>%
+  dplyr::rename(.feature = variable) %>%
+  #filter(!.feature %in% c(litter_vars, clim_vars)) %>%
+  mutate(.feature = gsub("\\.", " ", .feature))
+
+
+imp_plot_pdp_glm_pca_clim <- imp_results %>%
+  #mutate(var_type = case_when(feature %in% clim_vars ~ "Climate",
+  #                            feature %in% litter_vars ~ "Litter chem.",
+  #                            TRUE ~ "All")) |>
+  mutate(feature = gsub("\\.", " ", feature)) %>%
+    ggplot(aes(x = importance, y = feature, color = Clade)) +
+    scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
+    #facet_grid(var_type~., scales = "free_y", space = "free_y") +
+    geom_point(position = position_dodge(width = 0.4), size = 3) +
+    geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                   position = position_dodge(width = 0.4),
+                   height = 0,
+                   linewidth = 1.5) +
+  apatheme +
+  theme(text = element_text(size = 20),
+    strip.background = element_rect(fill = NA, colour = "black"),
+                                                            strip.text = element_text(size = 10),
+                                                            panel.grid.major.x = element_line(colour = "grey90"))
+print(imp_plot_pdp_glm_pca_clim)
+
+pdp_plot_glm_pca_clim <- effs_results %>%
+  #mutate(var_type = case_when(.feature %in% clim_vars ~ "Climate",
+  #                            .feature %in% litter_vars ~ "Litter chem.",
+  #                            TRUE ~ "All")) |>
+  mutate(.feature = gsub("\\.", " ", .feature)) %>%
+  ggplot(aes(x = .borders, y = .value, color = Clade)) +
+  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
+  scale_y_continuous(labels = scales::percent_format(scale = 0.1)) +
+  geom_rug(data = rug_pca, aes(x = value), sides = "b", inherit.aes = F) +
+  #geom_rug(data = rug_G, aes(x = value), sides = "b", inherit.aes = F) +
+  #facet_grid(Litter_type~.feature, scales = "free_x") +
+  facet_grid(~.feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  geom_line(linewidth = 1) +
+  apatheme +
+  theme(text = element_text(size = 18),
+    strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"))
+
+print(pdp_plot_glm_pca_clim)
+
+ggarrange(pdp_plot_glm_pca_clim, imp_plot_pdp_glm_pca_clim,
+          labels = "AUTO",
+          ncol = 2,
+          common.legend = T,
+          legend = "bottom",
+          widths = c(1, 0.5))
+
+ggsave(filename = here::here("plots_glm_pdp/pdp_plot_glm_clades_pca_clim.png"),
+       width =  65,
+       height = 25,
+       units = "cm",
+       dpi = 320)
+
+
+
+```
+
+##### PDP clade level with run_glm_analysis (bootstrapped CIs)
+
+```{r pdp-clades-glm-ci, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+set.seed(711)
+
+clade_glm_results <- cached(here::here("cache/clade_glm_results.rds"), {
+  res_list <- list()
+  for (clade in unique(clades_Ab_md$Clade)) {
+    message("Processing clade: ", clade)
+    df_cl <- clades_Ab_md %>%
+      filter(Clade == clade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_PC))) %>%
+      na.omit()
+    res <- run_glm_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_PC),
+      cv_folds = 10, nrep_vi = 500, n_boot = 100, grid.size = 20)
+    res$summary_table$Clade  <- clade
+    res$pdp_ci_df$Clade      <- clade
+    res$imp_results_rf$Clade <- clade
+    res_list[[clade]] <- res
+  }
+  res_list
+})
+
+# Combine into single tables
+all_summaries_glm <- bind_rows(lapply(clade_glm_results, `[[`, "summary_table"))
+all_pdp_ci_glm    <- bind_rows(lapply(clade_glm_results, `[[`, "pdp_ci_df"))
+all_imp_glm       <- bind_rows(lapply(clade_glm_results, `[[`, "imp_results_rf"))
+
+# Significant variables per clade (from GLM coefficient p-values)
+sig_lookup_glm <- map_dfr(
+  .x = names(clade_glm_results),
+  .f = function(cl) tibble(Clade = cl, feature = clade_glm_results[[cl]]$sig_vars_rfp)
+)
+
+write.table(all_summaries_glm, file = here::here("plots/GLM_validation_clades.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+all_imp_sig_glm <- all_imp_glm %>% semi_join(sig_lookup_glm, by = c("Clade", "feature"))
+
+# Recode features to match feature_levels
+all_imp_sig_glm <- all_imp_sig_glm %>%
+  mutate(
+    feature = gsub("[._]", " ", feature),
+    feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2"),
+    feature = if_else(feature %in% c("crude protein", "crude_protein"), "crude protein", feature)
+  )
+
+# Annotation positions
+pos_df_clade_glm <- all_imp_sig_glm %>%
+  group_by(Clade) %>%
+  reframe(x = max(importance, na.rm = TRUE) * 1.05, y = n() + 0.3)
+
+annot_df_clade_glm <- all_summaries_glm %>%
+  filter(Metric %in% c("10-fold CV R²", "Overall model p-value (F-test)")) %>%
+  dplyr::select(Clade, Metric, Value) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  dplyr::rename(CV_R2 = `10-fold CV R²`, P_val = `Overall model p-value (F-test)`) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0(
+      "atop(",
+        "CV~R^2==", round(CV_R2, 3), ",",
+        "italic(P)==", format.pval(P_num, digits = 2, eps = 1e-3),
+      ")"
+    )
+  ) %>%
+  left_join(pos_df_clade_glm, by = "Clade") %>%
+  dplyr::filter(!Clade %in% c("V", "UND"))
+
+# Importance plot
+imp_plot_pdp_glm_clades <- all_imp_sig_glm %>%
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars  ~ "Litter chemistry",
+                              TRUE ~ "All"),
+         Clade = factor(Clade, levels = c("I", "II", "III", "IV", "V", "UND"))) |>
+  dplyr::filter(Clade != "UND") |>
+  mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete_imp,
+                     labels = c(PC1 = "PC1 clim", PC2 = "PC2 clim"),
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(c("PC1", "PC2", "lignin", "cellulose", "hemicellulose", "crude protein", "pH"))) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Clade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(fill = clade_colors)
+                     )) +
+  geom_point(position = position_dodge(width = 0.4), size = 2.5) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.4), height = 0, linewidth = 1.5) +
+  geom_text(data = annot_df_clade_glm,
+            aes(x = 0.03, y = 1, label = expr),
+            parse = TRUE, inherit.aes = FALSE, hjust = 0, vjust = 0, size = 3) +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9), legend.position = "bottom")
+
+print(imp_plot_pdp_glm_clades)
+
+# PDP plot
+# Reuse rug_all from pdp-clades-rf (same predictor space)
+pdp_plot_ci_clades_glm <- all_pdp_ci_glm %>%
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars  ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry"))) |>
+  mutate(feature = gsub("[_.]", " ", feature)) |>
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
+  mutate(feature = factor(feature, levels = feature_levels)) |>
+  dplyr::filter(!Clade %in% c("UND")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Clade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V")) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_ci_clades_glm)
+
+ggarrange(pdp_plot_ci_clades_glm, imp_plot_pdp_glm_clades,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_clades_PCclim_litt_vars.png"),
+       width = width, height = width * 0.5, units = "mm", dpi = 300)
+```
+
+##### PDP subclade level with Random Forest model
+
+```{r pdp-subclades-rf, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+
+set.seed(711)
+
+colnames(subclades_Ab_md) <- gsub(" ", ".", colnames(subclades_Ab_md))
+
+
+#initialize empty data frames to store results
+imp_results <- data.frame()
+effs_results <- data.frame()
+
+#Set a loop to go over each clade
+for (subclade in unique(subclades_Ab_md$Subclade)) {
+#for (subclade in c("IC", "IIG", "IIIA", "IVA", "IVB", "VA")) {
+  #Set a loop to go over each type of litter
+  #for (litter in unique(subclades_Ab_md$Litter_type)) {
+    #subset for each clade and each type of litter
+    pdp_temp <- subclades_Ab_md %>%
+      filter(Subclade == subclade #& Litter_type == litter
+                                ) %>%
+      ungroup() %>%
+      dplyr::select(-c(Row.names, reserve_code, Litter_type, Subclade, clade)) |>
+      dplyr::select(all_of(c(litter_vars, clim_vars_PC)), Abundance)
+    #create a random forest for each subseted dataset
+    rf <- randomForest(Abundance ~., data = pdp_temp, ntree = 1000)
+    #get the variables for Abundace prediction
+    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
+    #set model variables for prediction of Abundance
+    predictor <- Predictor$new(rf, data = X, y = pdp_temp$Abundance)
+    #obtain importance of varibles in the model
+    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
+    
+    #store importance results into a data frame and add clade and litter type information
+    imp_temp <-imp$results
+    imp_temp$Subclade <- subclade
+    #imp_temp$Litter_type <- litter
+    
+    imp_results <- rbind(imp_results, imp_temp)
+    
+    #calculate predictions
+    effs <- FeatureEffects$new(predictor, grid.size = 20, method = "pdp")
+    effs_temp <- do.call(rbind, effs$results)
+    effs_temp$Subclade <- subclade
+    #effs_temp$Litter_type <- litter
+   
+    effs_results <- rbind(effs_results, effs_temp)
+    
+    rug <- X
+    #object_name <- paste("rug", litter, sep = "_")
+    #assign(object_name, X)
+  #}
+}
+
+subclade_results <- cached(here::here("cache/subclade_results.rds"), {
+  res_list <- list()
+  for (subclade in unique(subclades_Ab_md$Subclade)) {
+    message("Processing subclade: ", subclade)
+    df_cl <- subclades_Ab_md %>%
+      filter(Subclade == subclade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_PC))) %>%
+      na.omit()
+    res <- run_rf_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_PC),
+      ntree        = 1000, cv_folds = 10, nperm_oob = 500,
+      nrep_vi      = 100, n_boot = 100, grid.size = 20)
+    str(res$imp_results_rf)
+    res$summary_table$Subclade  <- subclade
+    res$pdp_ci_df$Subclade      <- subclade
+    res$imp_results_rf$Subclade <- subclade
+    res$rf_cv$results$Subclade  <- subclade
+    res_list[[subclade]] <- res
+  }
+  res_list
+})
+
+# Now: combine into single tables
+
+# (a) Combined summary of overall metrics:
+all_summaries_sub <- bind_rows(
+  lapply(subclade_results, `[[`, "summary_table")
+)
+
+# (b) Combined PDP+CI for all clades:
+all_pdp_ci_sub <- bind_rows(
+  lapply(subclade_results, `[[`, "pdp_ci_df")
+)
+
+# (c) Combined iml importances:
+all_imp_sub <- bind_rows(
+  lapply(subclade_results, `[[`, "imp_results_rf")
+)
+
+# (d) Combined CV results (if you like):
+all_cv_sub <- bind_rows(
+  lapply(subclade_results, function(x) x$rf_cv$results)
+)
+
+
+# Make a tibble with one row per clade‐feature pair
+sig_lookup_sub <- map_dfr(
+  .x   = names(subclade_results),
+  .f   = function(cl) {
+    tibble(
+      Subclade   = cl,
+      feature = subclade_results[[cl]]$sig_vars_rfp
+    )
+  }
+)
+
+all_summaries_sub <- all_summaries_sub |>
+  pivot_wider(id_cols = Subclade, names_from = "Metric", values_from = "Value")
+
+# Average 10-fold CV R² across subclades whose model is significant (permuted p < 0.05)
+mean_cv_r2_sig_sub <- all_summaries_sub |>
+  mutate(
+    p_val = as.numeric(sub("^<", "", `Permuted CV p-value`)),
+    cv_r2 = as.numeric(`10-fold CV R²`)
+  ) |>
+  dplyr::filter(p_val <= 0.05) |>
+  dplyr::summarise(n_significant = dplyr::n(),
+                   mean_CV_R2    = mean(cv_r2, na.rm = TRUE))
+mean_cv_r2_sig_sub
+
+
+write.table(all_summaries_sub, file = here::here("plots/RF_validation_subclades.csv"), quote = F, row.names = F, col.names = T, sep = ",")
+
+all_imp_sig_sub    <- all_imp_sub    %>% semi_join(sig_lookup_sub, by = c("Subclade", "feature"))
+#all_pdp_ci_sig_sub <- all_pdp_ci_sub %>% semi_join(sig_lookup_sub, by = c("Subclade", "feature"))
+
+
+# 1) Re‐mutate `all_imp_sig` so that its `feature` column is exactly one of those names:
+all_imp_sig_sub <- all_imp_sig_sub %>%
+  # 1a) Remove dots/underscores (separate mutate so downstream steps see the result)
+  mutate(feature = gsub("[._]", " ", feature)) %>%
+  # 1b) Recode the climate PCs and normalise crude protein
+  mutate(
+    feature = dplyr::recode(feature,
+      `PC1 clim` = "PC1",
+      `PC2 clim` = "PC2"),
+    feature = if_else(feature == "crude protein" | feature == "crude_protein",
+                      "crude protein", feature)
+    )
+
+# 2) compute finite coords *after* recoding + factoring features
+pos_df_subclade <- all_imp_sig_sub %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  group_by(
+    Subclade) %>%
+  reframe(
+    x = max(importance, na.rm = TRUE) * 1.05,
+    y = n() + 0.3           # 0.3 units above the topmost point
+  )
+
+
+
+
+# 1) extract per‐clade CV R² & p‐value
+annot_df_subclade <- all_summaries_sub %>%
+  dplyr::select(Subclade, `10-fold CV R²`, `Permuted CV p-value`) %>%
+  dplyr::rename(
+    CV_R2    = `10-fold CV R²`,
+    P_val    = `Permuted CV p-value`
+  ) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0(
+      "atop(",
+        "CV~R^2==", round(CV_R2, 3), ",",
+        "italic(P)<", format.pval(P_num, digits=2, eps = 1e-3),
+      ")"
+    )
+  )
+
+
+
+annot_df_subclade <- annot_df_subclade %>% left_join(pos_df_subclade, by="Subclade") |>
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG")))
+  
+
+
+
+imp_plot_pdp_rf_sub <- all_imp_sig_sub %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars ~ "Litter chemistry",
+                              TRUE ~ NA),
+         Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG"))) |> 
+  mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  #scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVA", "IVB", "VA")) +
+  scale_color_manual(values = allvars_pallete_imp,
+                     labels = c(PC1 = "PC1 clim", PC2 = "PC2 clim"),
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(c("PC1", "PC2", "lignin", "cellulose", "hemicellulose", "crude protein", "pH"))) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  #facet_grid(var_type~., scales = "free_y", space = "free_y") +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "fixed",
+                       strip = ggh4x::strip_themed(
+                         background_y = ggh4x::elem_list_rect(
+                           fill = alpha(subclade_colros[names(subclade_colros) %in% c("IIIA", "IC", "IVB", "IIG")][c(3,1,4,2)], 0.75) # one color per Sublade
+                         )
+                       )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6),
+                 height = 0,
+                 linewidth = 1.5) +
+    geom_text(
+    data        = annot_df_subclade,
+    aes(x = 0.0275, y = 1, label = expr),
+    parse       = TRUE,
+    inherit.aes = FALSE,
+    hjust       = 0,      # 0 = flush against the right edge since x is already max*1.05
+    vjust       = 0,      # 0 = flush above the top bar
+    size        = 3
+  ) +
+  xlab("importance (RMSE)") +
+   apatheme +
+  theme(#strip.background = element_rect(fill = NA, colour = "black"),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.line.y = element_blank(),
+        strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+    panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+    legend.title = element_blank(),
+    legend.spacing = unit(0.1, "cm"),  
+    legend.key.size = unit(0.3, "cm"),
+    legend.margin = ggplot2::margin(0, 0, 0, 0),
+    legend.text = element_text(size = 11),
+    legend.position = "bottom")
+
+print(imp_plot_pdp_rf_sub)
+
+
+# prepare rug data
+rug_all <- reshape2::melt(subclade_results$IIIA$rug) %>%
+  #dplyr::filter(variable %in% unique(sig_lookup_sub$feature) & variable != "crude_protein") |>
+  dplyr::rename(feature = variable) |>
+  mutate(var_type = case_when(
+    feature %in% c(clim_vars_PC, clim_vars) ~ "Climate",
+    feature %in% c(litter_vars, litter_vars_PC) ~ "Litter chemistry",
+    TRUE ~ NA
+  )) |>
+  mutate(feature = gsub("[._]", " ", feature)) |>
+  mutate(feature = dplyr::recode(feature,
+                       `PC1 clim` = "PC1",
+                       `PC2 clim` = "PC2")) |>
+  mutate(feature = factor(feature, levels = feature_levels))
+
+#### plot effects
+
+pdp_plot_ci_subclades <- all_pdp_ci_sub %>%
+    # 1) classify each feature
+    mutate(
+      var_type = case_when(
+        feature %in% clim_vars_PC  ~ "Climate",
+        feature %in% litter_vars   ~ "Litter chemistry",
+        TRUE                        ~ NA_character_
+      )) |>
+    mutate(var_type = factor(var_type ,levels = c("Climate", "Litter chemistry"))) |>
+  
+      # 2) clean up any underscores
+    mutate(
+      feature = gsub("[_.]", " ", feature)) |> 
+  
+      # 3) optionally recode the feature names
+      mutate(
+        feature = dplyr::recode(feature,
+                       `PC1 clim` = "PC1",
+                       `PC2 clim` = "PC2")) |>
+      mutate(feature = factor(feature, levels = feature_levels)
+           ) |> 
+      # 4) Optionally remove "UND" (undefined) clade
+      dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |> 
+  
+    # 4) Generate plot
+    ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+    
+      # 4) ribbon + line
+      #geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = feature), alpha = 0.2, colour = NA) +
+      geom_line(size = 1) +
+    
+      # 5) percent y-axis
+      scale_y_continuous(labels = percent_format(scale = 100)) +
+    
+      # 6) match your custom palette
+      scale_color_manual(values = subclade_colors_bp, limits = c("IC", "IIG", "IIIA", "IVB")) +
+      #scale_fill_manual(values = allvars_pallete) +
+      scale_linetype_manual(name = NULL,
+                            #name = expression(italic("P")),
+                            values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                            labels = c(expression(P > 0.05),                      # math‐style labels
+                                       expression(P < 0.05))) +
+    
+      # 7) show raw data distribution on the x-axis
+      geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = FALSE) +
+    
+      # 8) nested facets by type + feature
+      ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+    
+      # 9) labels
+      labs(
+        x     = "Variable value",
+        y     = paste("Predicted relative abundance")
+      ) +
+    
+      # 10) drop the legend (we encode feature in the facet strip)
+      guides(color = "none",
+             fill = "none",
+             linetype = "none") +
+    
+      # 11) your custom theme + tweaks
+      apatheme +
+      theme(
+        axis.title.y    = element_text(size = 12, margin = ggplot2::margin(r = 10)),
+        axis.text.y     = element_text(size = 11),
+        axis.text.x     = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text      = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text            = element_text(size = 10),
+        # position legend inside top-left of each panel
+        legend.position     = c(0.02, 0.98),
+        legend.justification = c(0, 1),
+        legend.background   = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size     = unit(0.3, "cm"),
+        legend.text         = element_text(size = 6),
+        legend.key.width = unit(1, "cm"),   # give more horizontal room for the dash
+        legend.key.height= unit(0.5, "cm"),
+        legend.title = element_text(size = 8)
+      )
+
+print(pdp_plot_ci_subclades)
+
+## remove text from importance plot
+
+imp_plot_pdp_rf_sub$layers[[3]] <- NULL
+
+
+ggarrange(pdp_plot_ci_subclades + theme(plot.margin = ggplot2::margin(5, 15, 5, 5)),
+          imp_plot_pdp_rf_sub + theme(plot.margin = ggplot2::margin(5, 5, 5, 15)),
+          labels = "AUTO",
+          ncol = 2,
+          common.legend = F,
+          widths = c(1.5, 0.5),
+          hjust = -0.05, vjust = 1)
+
+wdith <- 250
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_subclades_PCAclim_litt_vars.png"),
+       width =  width,
+       height = width*0.5,
+       units = "mm",
+       dpi = 300,
+       bg = "white")
+
+
+#### low abundance subclades
+
+
+correct_order[-c(1,4,5,12,16,17,23,25,29)]
+
+
+
+
+imp_plot_pdp_rf_sub_lowAb <- all_imp_sig_sub %>%
+  dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars ~ "Litter chemistry",
+                              TRUE ~ NA),
+         Subclade = factor(Subclade, levels = correct_order[-c(1,4,5,12,16,17,23,25,29)])) |> 
+  mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  #scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVA", "IVB", "VA")) +
+  scale_color_manual(values = allvars_pallete_imp,
+                     labels = c(PC1 = "PC1 clim", PC2 = "PC2 clim"),
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(c("PC1", "PC2", "lignin", "cellulose", "hemicellulose", "crude protein", "pH"))) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  #facet_grid(var_type~., scales = "free_y", space = "free_y") +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "free_y",
+                       strip = ggh4x::strip_themed(
+                         background_y = ggh4x::elem_list_rect(
+                           fill = subclade_colors_bp[names(subclade_colors_bp) %in% correct_order[-c(1,4,5,10,12,16,17,23,24,25,29)]] # one color per Sublade
+                         )
+                       )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6),
+                 height = 0,
+                 linewidth = 1.5) +
+  xlab("importance (RMSE)") +
+   apatheme +
+  theme(#strip.background = element_rect(fill = NA, colour = "black"),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.line.y = element_blank(),
+        strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+    panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+    legend.spacing = unit(0.1, "cm"),  
+    legend.key.size = unit(0.3, "cm"),
+    legend.margin = ggplot2::margin(0, 0, 0, 0),
+    legend.text = element_text(size = 9))
+print(imp_plot_pdp_rf_sub_lowAb)
+
+
+#### plot effects
+
+
+pdp_plot_ci_subclades_lowAb <- all_pdp_ci_sub %>%
+  mutate(Clade = case_when(Subclade %in% clade_I_subclades ~ "I",
+                           Subclade %in% clade_II_subclades ~ "II",
+                           Subclade %in% clade_III_subclades ~ "III",
+                           Subclade %in% clade_IV_subclades ~ "IV",
+                           Subclade %in% clade_V_subclades ~ "V"
+                           )) %>%
+    # 1) classify each feature
+    mutate(
+      var_type = case_when(
+        feature %in% clim_vars_PC  ~ "Climate",
+        feature %in% litter_vars   ~ "Litter chemistry",
+        TRUE                        ~ NA_character_
+      )) |>
+    mutate(var_type = factor(var_type ,levels = c("Climate", "Litter chemistry"))) |>
+  
+      # 2) clean up any underscores
+    mutate(
+      feature = gsub("[_.]", " ", feature)) |> 
+  
+      # 3) optionally recode the feature names
+      mutate(
+        feature = dplyr::recode(feature,
+                       `PC1 clim` = "PC1",
+                       `PC2 clim` = "PC2")) |>
+      mutate(feature = factor(feature, levels = feature_levels)
+           ) |> 
+      # 4) Optionally remove "UND" (undefined) clade
+      dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |> 
+  
+    # 4) Generate plot
+    ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+    
+      # 4) ribbon + line
+      #geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = feature), alpha = 0.2, colour = NA) +
+      geom_line(size = 1) +
+    
+      # 5) percent y-axis
+      scale_y_continuous(labels = percent_format(scale = 100)) +
+    
+      # 6) match your custom palette
+      scale_color_manual(values = subclade_colors_bp) +
+      #scale_fill_manual(values = allvars_pallete) +
+      scale_linetype_manual(name = NULL,
+                            #name = expression(italic("P")),
+                            values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                            labels = c(expression(P > 0.05),                      # math‐style labels
+                                       expression(P < 0.05))) +
+    
+      # 7) show raw data distribution on the x-axis
+      geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = FALSE) +
+    
+      # 8) nested facets by type + feature
+      ggh4x::facet_nested(Clade~var_type + feature, scales = "free_x") +
+    
+      # 9) labels
+      labs(
+        x     = "Variable value",
+        y     = paste("Predicted relative abundance")
+      ) +
+    
+      # 10) drop the legend (we encode feature in the facet strip)
+      guides(color = "none",
+             fill = "none",
+             linetype = guide_legend(order = 1,
+                        override.aes = list(size = 1))
+                        ) +
+    
+      # 11) your custom theme + tweaks
+      apatheme +
+      theme(
+        axis.title.y    = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y     = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text      = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text            = element_text(size = 10),
+        # position legend inside top-left of each panel
+        legend.position     = c(0.02, 0.98),
+        legend.justification = c(0, 1),
+        legend.background   = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size     = unit(0.3, "cm"),
+        legend.text         = element_text(size = 6),
+        legend.key.width = unit(1, "cm"),   # give more horizontal room for the dash
+        legend.key.height= unit(0.5, "cm"),
+        legend.title = element_text(size = 8)
+      )
+
+print(pdp_plot_ci_subclades_lowAb)
+
+
+ggarrange(pdp_plot_ci_subclades_lowAb, imp_plot_pdp_rf_sub_lowAb,
+          labels = "AUTO",
+          ncol = 2,
+          common.legend = F,
+          legend = "bottom",
+          widths = c(1.5, 0.5),
+          hjust = -0.05, vjust = 1)
+
+wdith <- 260
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_subclades_PCAclim_litt_vars_lowAb.png"),
+       width =  width,
+       height = width*0.75,
+       units = "mm",
+       dpi = 300)
+
+
+```
+
+##### PDP subclade level with generalized linear model model
+
+```{r pdp-subclades-glm, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20,}
+set.seed(711)
+ 
+#initialize empty data frames to store results
+imp_results <- data.frame()
+effs_results <- data.frame()
+
+#Set a loop to go over each clade
+#for (subclade in unique(subclades_Ab_md$Subclade)) {
+for (subclade in c("IC", "IIG", "IIIA", "IVB", "VA")) {
+  #Set a loop to go over each type of litter
+  #for (litter in unique(subclades_Ab_md$Litter_type)) {
+    #subset for each clade and each type of litter
+    pdp_temp <- subclades_Ab_md %>%
+      filter(Subclade == subclade #& Litter_type == litter
+                                ) %>%
+      ungroup() %>%
+      dplyr::select(!c(Row.names, reserve_code, Litter_type, Subclade, clade))
+    #create a GLM for each subseted dataset
+    glm.mod <- glm(Abundance ~., data = pdp_temp)
+    #get the variables for Abundace prediction
+    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
+    #set model variables for prediction of Abundance
+    predictor <- Predictor$new(glm.mod, data = X, y = pdp_temp$Abundance)
+    #obtain importance of varibles in the model
+    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
+    
+    #store importance results into a data frame and add clade and litter type information
+    imp_temp <-imp$results
+    imp_temp$Subclade <- subclade
+    #imp_temp$Litter_type <- litter
+    
+    imp_results <- rbind(imp_results, imp_temp)
+    
+    #calculate predictions
+    effs <- FeatureEffects$new(predictor, grid.size = 1000, method = "pdp")
+    effs_temp <- do.call(rbind, effs$results)
+    effs_temp$Subclade <- subclade
+    #effs_temp$Litter_type <- litter
+   
+    effs_results <- rbind(effs_results, effs_temp)
+  #}
+}
+
+imp_plot_pdp_glm_sub <- imp_results %>%
+  mutate(var_type = case_when(feature %in% clim_vars ~ "Climate",
+                              feature %in% litter_vars ~ "Litter chem.",
+                              TRUE ~ "All")) |>
+  mutate(feature = gsub("\\.", " ", feature)) %>%
+    ggplot(aes(x = importance, y = feature, color = Subclade)) +
+    scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVB", "VA")) +
+    #facet_grid(Litter_type~.) +
+    facet_grid(var_type~., scales = "free_y", space = "free_y") +
+    geom_point(position = position_dodge(width = 0.4), size = 3) +
+    geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                   position = position_dodge(width = 0.4),
+                   height = 0,
+                   linewidth = 1.5) + apatheme + theme(strip.background = element_rect(fill = NA, colour = "black"),
+                                                            strip.text = element_text(size = 10),
+                                                            panel.grid.major.x = element_line(colour = "grey90"))
+print(imp_plot_pdp_glm_sub)
+
+pdp_plot_glm_sub <- effs_results %>%
+  mutate(var_type = case_when(.feature %in% clim_vars ~ "Climate",
+                              .feature %in% litter_vars ~ "Litter chem.",
+                              TRUE ~ "All")) |>
+  mutate(.feature = gsub("\\.", " ", .feature)) %>%
+  ggplot(aes(x = .borders, y = .value, color = Subclade)) +
+  scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVB", "VA")) +
+  scale_y_continuous(limits = c(0, 10),
+                     labels = scales::percent_format(scale = 0.1)) +
+  geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = F) +
+  #geom_rug(data = rug_G, aes(x = value), sides = "b", inherit.aes = F) +
+  #facet_grid(Litter_type~.feature, scales = "free_x") +
+  ggh4x::facet_nested(~var_type + .feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  geom_line(linewidth = 1) +
+  apatheme +
+  theme(strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"))
+
+print(pdp_plot_glm_sub)
+
+ggarrange(pdp_plot_glm_sub, imp_plot_pdp_glm_sub,
+          labels = "AUTO",
+          ncol = 2,
+          common.legend = T,
+          legend = "bottom",
+          widths = c(1, 0.5))
+
+ggsave(filename = here::here("plots_glm_pdp/pdp_plot_glm_subclades.png"),
+       width =  65,
+       height = 25,
+       units = "cm",
+       dpi = 320)
+
+```
+##### PDP subclade level with run_glm_analysis (bootstrapped CIs)
+
+```{r pdp-subclades-glm-ci, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+set.seed(711)
+
+subclade_glm_results <- cached(here::here("cache/subclade_glm_results.rds"), {
+  res_list <- list()
+  for (subclade in unique(subclades_Ab_md$Subclade)) {
+    message("Processing subclade: ", subclade)
+    df_cl <- subclades_Ab_md %>%
+      filter(Subclade == subclade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_PC))) %>%
+      na.omit()
+    res <- run_glm_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_PC),
+      cv_folds = 10, nrep_vi = 100, n_boot = 100, grid.size = 20)
+    res$summary_table$Subclade  <- subclade
+    res$pdp_ci_df$Subclade      <- subclade
+    res$imp_results_rf$Subclade <- subclade
+    res_list[[subclade]] <- res
+  }
+  res_list
+})
+
+# Combine into single tables
+all_summaries_glm_sub <- bind_rows(lapply(subclade_glm_results, `[[`, "summary_table"))
+all_pdp_ci_glm_sub    <- bind_rows(lapply(subclade_glm_results, `[[`, "pdp_ci_df"))
+all_imp_glm_sub       <- bind_rows(lapply(subclade_glm_results, `[[`, "imp_results_rf"))
+
+# Significant variables per subclade
+sig_lookup_glm_sub <- map_dfr(
+  .x = names(subclade_glm_results),
+  .f = function(cl) tibble(Subclade = cl, feature = subclade_glm_results[[cl]]$sig_vars_rfp)
+)
+
+write.table(all_summaries_glm_sub, file = here::here("plots/GLM_validation_subclades.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+all_imp_sig_glm_sub <- all_imp_glm_sub %>% semi_join(sig_lookup_glm_sub, by = c("Subclade", "feature"))
+
+# Recode features
+all_imp_sig_glm_sub <- all_imp_sig_glm_sub %>%
+  mutate(
+    feature = gsub("[._]", " ", feature),
+    feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2"),
+    feature = if_else(feature %in% c("crude protein", "crude_protein"), "crude protein", feature)
+  )
+
+# Annotation positions (high-abundance subclades only)
+pos_df_subclade_glm <- all_imp_sig_glm_sub %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  group_by(Subclade) %>%
+  reframe(x = max(importance, na.rm = TRUE) * 1.05, y = n() + 0.3)
+
+annot_df_subclade_glm <- all_summaries_glm_sub %>%
+  filter(Metric %in% c("10-fold CV R²", "Overall model p-value (F-test)")) %>%
+  dplyr::select(Subclade, Metric, Value) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  dplyr::rename(CV_R2 = `10-fold CV R²`, P_val = `Overall model p-value (F-test)`) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0(
+      "atop(",
+        "CV~R^2==", round(CV_R2, 3), ",",
+        "italic(P)==", format.pval(P_num, digits = 2, eps = 1e-3),
+      ")"
+    )
+  ) %>%
+  left_join(pos_df_subclade_glm, by = "Subclade") %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) %>%
+  mutate(Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG")))
+
+# Rug data (reuse same predictor space as RF)
+rug_all_glm_sub <- reshape2::melt(subclade_glm_results$IIIA$rug) %>%
+  dplyr::rename(feature = variable) |>
+  mutate(var_type = case_when(
+    feature %in% c(clim_vars_PC, clim_vars) ~ "Climate",
+    feature %in% c(litter_vars, litter_vars_PC) ~ "Litter chemistry",
+    TRUE ~ NA
+  )) |>
+  mutate(feature = gsub("[._]", " ", feature)) |>
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
+  mutate(feature = factor(feature, levels = feature_levels))
+
+# --- High-abundance subclades ---
+
+imp_plot_pdp_glm_sub <- all_imp_sig_glm_sub %>%
+  dplyr::filter(Subclade %in% c("IIIA", "IC", "IVB", "IIG")) |>
+  # Add placeholder rows for subclades with no significant variables so their
+  # facet panels still render (empty panels with space = "free_y" have 0 height)
+  bind_rows(
+    tibble(Subclade = c("IC", "IIG"), feature = "PC1",
+           importance = NA_real_, importance.05 = NA_real_, importance.95 = NA_real_)
+  ) |>
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars  ~ "Litter chemistry",
+                              TRUE ~ NA),
+         Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG"))) |>
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
+  mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete_imp,
+                     labels = c(PC1 = "PC1 clim", PC2 = "PC2 clim"),
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(c("PC1", "PC2", "lignin", "cellulose", "hemicellulose", "crude protein", "pH"))) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(
+                         fill = subclade_colros[c("IIIA", "IC", "IVB", "IIG")]
+                       )
+                     )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6), height = 0, linewidth = 1.5) +
+  geom_text(data = annot_df_subclade_glm |> dplyr::filter(Subclade %in% c("IIIA", "IC", "IVB", "IIG")),
+            aes(x = 0.0275, y = 1, label = expr),
+            parse = TRUE, inherit.aes = FALSE, hjust = 0, vjust = 0, size = 3) +
+  xlab("importance (RMSE)") +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9), legend.position = "bottom",
+        plot.margin = ggplot2::margin(t = 5, r = 5, b = 5, l = 15))
+
+print(imp_plot_pdp_glm_sub)
+
+pdp_plot_ci_subclades_glm <- all_pdp_ci_glm_sub %>%
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars  ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry"))) |>
+  mutate(feature = gsub("[_.]", " ", feature)) |>
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
+  mutate(feature = factor(feature, levels = feature_levels)) |>
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = subclade_colors_bp, limits = c("IC", "IIG", "IIIA", "IVB")) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_all_glm_sub, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y = element_text(size = 8), axis.text.x = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_ci_subclades_glm)
+
+imp_plot_pdp_glm_sub$layers[[3]] <- NULL  # remove annotation layer for combined plot
+
+ggarrange(pdp_plot_ci_subclades_glm, imp_plot_pdp_glm_sub,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_subclades_PCAclim_litt_vars.png"),
+       width = width, height = width * 0.5, units = "mm", dpi = 300, bg = "white")
+
+# --- Low-abundance subclades ---
+
+# Ordered low-abundance subclades present in the data — used for both factor levels and strip colors
+subs_lowAb <- intersect(
+  correct_order[-c(1, 4, 5, 12, 16, 17, 23, 25, 29)],
+  unique(all_imp_sig_glm_sub$Subclade[!all_imp_sig_glm_sub$Subclade %in% c("IC", "IIG", "IIIA", "IVB")])
+)
+
+imp_plot_pdp_glm_sub_lowAb <- all_imp_sig_glm_sub %>%
+  dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars  ~ "Litter chemistry",
+                              TRUE ~ NA),
+         Subclade = factor(Subclade, levels = subs_lowAb)) |>
+  mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete_imp,
+                     labels = c(PC1 = "PC1 clim", PC2 = "PC2 clim"),
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(c("PC1", "PC2", "lignin", "cellulose", "hemicellulose", "crude protein", "pH"))) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(
+                         fill = subclade_colors_bp[subs_lowAb]
+                       )
+                     )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6), height = 0, linewidth = 1.5) +
+  xlab("importance (RMSE)") +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9))
+
+print(imp_plot_pdp_glm_sub_lowAb)
+
+ pdp_plot_ci_subclades_glm_lowAb <- all_pdp_ci_glm_sub %>%
+  mutate(Clade = case_when(Subclade %in% clade_I_subclades   ~ "I",
+                           Subclade %in% clade_II_subclades  ~ "II",
+                           Subclade %in% clade_III_subclades ~ "III",
+                           Subclade %in% clade_IV_subclades  ~ "IV",
+                           Subclade %in% clade_V_subclades   ~ "V")) %>%
+  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
+                              feature %in% litter_vars  ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry"))) |>
+  mutate(feature = gsub("[_.]", " ", feature)) |>
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
+  mutate(feature = factor(feature, levels = feature_levels)) |>
+  dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = subclade_colors_bp) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_all_glm_sub, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(Clade ~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_ci_subclades_glm_lowAb)
+
+ggarrange(pdp_plot_ci_subclades_glm_lowAb, imp_plot_pdp_glm_sub_lowAb,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_subclades_PCAclim_litt_vars_lowAb.png"),
+       width = width, height = width * 0.75, units = "mm", dpi = 300)
+```
+
+##### 2D heatmap PDPs — top 4 subclades (RF)
+
+```{r pdp-subclades-rf-heatmap, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=20, fig.height=12}
+top4_subclades <- c("IIIA", "IC", "IVB", "IIG")
+
+subclades_2d_pdp_rf <- cached(here::here("cache/subclades_2d_pdp_rf.rds"), {
+  map_dfr(top4_subclades, function(sub) {
+    message("Subclade: ", sub)
+    mod  <- subclade_results[[sub]]$rf_full
+    X    <- subclade_results[[sub]]$rug
+    y    <- subclade_results[[sub]]$rf_full$y
+    pred <- Predictor$new(mod, data = X, y = y)
+
+    map_dfr(clim_vars_PC, function(cv) {
+      map_dfr(litter_vars, function(lv) {
+        message("  ", cv, " x ", lv)
+        eff <- FeatureEffect$new(pred, feature = c(cv, lv), method = "pdp", grid.size = 20)
+        eff$results |>
+          dplyr::rename(clim_value = all_of(cv), litter_value = all_of(lv)) |>
+          dplyr::mutate(clim_var = cv, litter_var = lv, Subclade = sub)
+      })
+    })
+  })
+})
+
+heatmap_2d_pdp_rf <- function(sub) {
+  subclades_2d_pdp_rf |>
+    dplyr::filter(Subclade == sub) |>
+    mutate(
+      clim_var   = dplyr::recode(gsub("[._]", " ", clim_var),
+                                  `PC1 clim` = "PC1", `PC2 clim` = "PC2"),
+      litter_var = gsub("_", " ", litter_var),
+      litter_var = factor(litter_var, levels = gsub("_", " ", litter_vars)),
+      clim_var   = factor(clim_var,   levels = c("PC1", "PC2"))
+    ) |>
+    ggplot(aes(x = litter_value, y = clim_value, fill = .value)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c(name = "Predicted\nabundance",
+                         labels = scales::percent_format(scale = 100)) +
+    facet_grid(clim_var ~ litter_var, scales = "free") +
+    labs(x = "Litter chemistry variable value",
+         y = "Climate variable value",
+         title = sub) +
+    apatheme +
+    theme(plot.title        = element_text(hjust = 0.5, face = "bold", size = 11,
+                                           colour = subclade_colors_bp[sub]),
+          strip.background  = element_rect(fill = NA, colour = "black"),
+          strip.text        = element_text(size = 8),
+          axis.text         = element_text(size = 7),
+          axis.title        = element_text(size = 9),
+          panel.spacing     = unit(0.3, "cm"),
+          legend.key.height = unit(1, "cm"))
+}
+
+pdp_heatmaps_rf <- lapply(top4_subclades, heatmap_2d_pdp_rf)
+
+ggarrange(plotlist = pdp_heatmaps_rf, ncol = 2, nrow = 2,
+          common.legend = TRUE, legend = "right")
+
+ggsave(here::here("plots/plots_pdp/pdp_heatmap_rf_top4_subclades.png"),
+       width = 300, height = 200, units = "mm", dpi = 300, bg = "white")
+```
+
+##### 2D heatmap PDPs — significant predictors only (RF)
+
+```{r pdp-subclades-rf-heatmap-sig, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=16, fig.height=12}
+
+# Build per-subclade list of significant (clim, litter) pairs
+sig_pairs <- lapply(setNames(top4_subclades, top4_subclades), function(sub) {
+  sig       <- subclade_results[[sub]]$sig_vars_rfp
+  sig_clim  <- intersect(sig, clim_vars_PC)
+  sig_litt  <- intersect(sig, litter_vars)
+  expand.grid(clim_var = sig_clim, litter_var = sig_litt,
+              stringsAsFactors = FALSE)
+})
+
+# Drop subclades with no valid pairs
+sig_pairs <- Filter(function(x) nrow(x) > 0, sig_pairs)
+
+message("Subclades with significant clim × litter pairs: ",
+        paste(names(sig_pairs), collapse = ", "))
+
+subclades_2d_pdp_rf_sig <- cached(here::here("cache/subclades_2d_pdp_rf_sig.rds"), {
+  map_dfr(names(sig_pairs), function(sub) {
+    message("Subclade: ", sub)
+    mod  <- subclade_results[[sub]]$rf_full
+    X    <- subclade_results[[sub]]$rug
+    y    <- subclade_results[[sub]]$rf_full$y
+    pred <- Predictor$new(mod, data = X, y = y)
+
+    pmap_dfr(sig_pairs[[sub]], function(clim_var, litter_var) {
+      message("  ", clim_var, " x ", litter_var)
+      eff <- FeatureEffect$new(pred, feature = c(clim_var, litter_var),
+                               method = "pdp", grid.size = 20)
+      eff$results |>
+        dplyr::rename(clim_value = all_of(clim_var), litter_value = all_of(litter_var)) |>
+        dplyr::mutate(clim_var = clim_var, litter_var = litter_var, Subclade = sub)
+    })
+  })
+})
+
+heatmap_2d_pdp_rf_sig <- function(sub) {
+  subclades_2d_pdp_rf_sig |>
+    dplyr::filter(Subclade == sub, clim_var == "PC2.clim") |>
+    mutate(
+      litter_var = gsub("_", " ", litter_var),
+      litter_var = factor(litter_var, levels = gsub("_", " ", litter_vars))
+    ) |>
+    ggplot(aes(x = litter_value, y = clim_value, fill = .value)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c(name = "Predicted\nabundance",
+                         labels = scales::percent_format(scale = 100)) +
+    facet_grid(. ~ litter_var, scales = "free_x") +
+    labs(x = "Litter chemistry variable value",
+         y = "PC2 climate value",
+         title = sub) +
+    apatheme +
+    theme(plot.title        = element_text(hjust = 0.5, face = "bold", size = 11,
+                                           colour = subclade_colors_bp[sub]),
+          strip.background  = element_rect(fill = NA, colour = "black"),
+          strip.text        = element_text(size = 8),
+          axis.text         = element_text(size = 7),
+          axis.title        = element_text(size = 9),
+          panel.spacing     = unit(0.3, "cm"),
+          legend.key.height = unit(1, "cm"))
+}
+
+pdp_heatmaps_rf_sig <- lapply(names(sig_pairs), heatmap_2d_pdp_rf_sig)
+
+ggarrange(plotlist = pdp_heatmaps_rf_sig,
+          ncol = length(pdp_heatmaps_rf_sig), nrow = 1,
+          common.legend = TRUE, legend = "right")
+
+ggsave(here::here("plots/plots_pdp/pdp_heatmap_rf_top4_subclades_sig_vars.png"),
+       width = 100 * length(pdp_heatmaps_rf_sig), height = 160,
+       units = "mm", dpi = 300, bg = "white")
+```
+
+#### RF + PDP with MAT & MAP as climate variables
+
+```{r mat-map-setup, include=FALSE}
+clim_vars_MATMAP      <- c("MAT", "MAP")
+feature_levels_MATMAP <- c("MAT", "MAP", "lignin", "cellulose", "hemicellulose", "crude protein", "pH")
+width_mm              <- 240
+```
+
+##### Clade level — RF (MAT & MAP)
+
+```{r pdp-clades-rf-mat-map, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+set.seed(711)
+
+clade_results_MATMAP <- cached(here::here("cache/clade_results_MATMAP.rds"), {
+  res_list <- list()
+  for (clade in unique(clades_Ab_md$Clade)) {
+    message("Processing clade: ", clade)
+    df_cl <- clades_Ab_md %>%
+      filter(Clade == clade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_MATMAP))) %>%
+      na.omit()
+    res <- run_rf_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_MATMAP),
+      ntree        = 1000, cv_folds = 10, nperm_oob = 500,
+      nrep_vi      = 500,  n_boot = 100, grid.size = 20)
+    res$summary_table$Clade  <- clade
+    res$pdp_ci_df$Clade      <- clade
+    res$imp_results_rf$Clade <- clade
+    res$rf_cv$results$Clade  <- clade
+    res_list[[clade]] <- res
+  }
+  res_list
+})
+
+all_summaries_MATMAP <- bind_rows(lapply(clade_results_MATMAP, `[[`, "summary_table"))
+all_pdp_ci_MATMAP    <- bind_rows(lapply(clade_results_MATMAP, `[[`, "pdp_ci_df"))
+all_imp_MATMAP       <- bind_rows(lapply(clade_results_MATMAP, `[[`, "imp_results_rf"))
+
+sig_lookup_MATMAP <- map_dfr(names(clade_results_MATMAP), function(cl) {
+  tibble(Clade = cl, feature = clade_results_MATMAP[[cl]]$sig_vars_rfp)
+})
+
+write.table(all_summaries_MATMAP,
+            file = here::here("plots/RF_validation_clades_MATMAP.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+all_imp_sig_MATMAP <- all_imp_MATMAP %>%
+  semi_join(sig_lookup_MATMAP, by = c("Clade", "feature")) %>%
+  mutate(
+    feature = gsub("_", " ", feature),
+    feature = factor(feature, levels = feature_levels_MATMAP)
+  )
+
+pos_df_clade_MATMAP <- all_imp_sig_MATMAP %>%
+  group_by(Clade) %>%
+  reframe(x = max(importance, na.rm = TRUE) * 1.05, y = n() + 0.3)
+
+annot_df_clade_MATMAP <- all_summaries_MATMAP %>%
+  filter(Metric %in% c("10-fold CV R²", "Permuted CV p-value")) %>%
+  dplyr::select(Clade, Metric, Value) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  dplyr::rename(CV_R2 = `10-fold CV R²`, P_val = `Permuted CV p-value`) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0("atop(CV~R^2==", round(CV_R2, 3), ",italic(P)<",
+                   format.pval(P_num, digits = 2, eps = 1e-3), ")")
+  ) %>%
+  left_join(pos_df_clade_MATMAP, by = "Clade") %>%
+  dplyr::filter(!Clade %in% c("V", "UND"))
+
+imp_plot_rf_clades_MATMAP <- all_imp_sig_MATMAP %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% gsub("_", " ", litter_vars) ~ "Litter chemistry",
+                              TRUE ~ "All"),
+         Clade = factor(Clade, levels = c("I", "II", "III", "IV", "V", "UND"))) |>
+  dplyr::filter(Clade != "UND") |>
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete[feature_levels_MATMAP],
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(feature_levels_MATMAP)) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Clade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(fill = clade_colors[-5])
+                     )) +
+  geom_point(position = position_dodge(width = 0.4), size = 2.5) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.4), height = 0, linewidth = 1.5) +
+  geom_text(data = annot_df_clade_MATMAP,
+            aes(x = 0.03, y = 1, label = expr),
+            parse = TRUE, inherit.aes = FALSE, hjust = 0, vjust = 0, size = 3) +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9), legend.position = "bottom")
+
+rug_clades_MATMAP <- reshape2::melt(clade_results_MATMAP$I$rug) %>%
+  dplyr::rename(feature = variable) |>
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP))
+
+pdp_plot_clades_MATMAP <- all_pdp_ci_MATMAP %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry")),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP)) |>
+  dplyr::filter(!Clade %in% c("UND", "V")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Clade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "UND")) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_clades_MATMAP, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y  = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text   = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_clades_MATMAP)
+print(imp_plot_rf_clades_MATMAP)
+
+ggarrange(pdp_plot_clades_MATMAP, imp_plot_rf_clades_MATMAP,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(here::here("plots/plots_pdp/pdp_plot_rf_clades_MAT_MAP_litt_vars.png"),
+       width = width_mm, height = width_mm * 0.5, units = "mm", dpi = 300)
+```
+
+##### Subclade level — RF (MAT & MAP)
+
+```{r pdp-subclades-rf-mat-map, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+set.seed(711)
+
+subclade_results_MATMAP <- cached(here::here("cache/subclade_results_MATMAP.rds"), {
+  res_list <- list()
+  for (subclade in unique(subclades_Ab_md$Subclade)) {
+    message("Processing subclade: ", subclade)
+    df_cl <- subclades_Ab_md %>%
+      filter(Subclade == subclade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_MATMAP))) %>%
+      na.omit()
+    res <- run_rf_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_MATMAP),
+      ntree        = 1000, cv_folds = 10, nperm_oob = 500,
+      nrep_vi      = 100,  n_boot = 100, grid.size = 20)
+    res$summary_table$Subclade  <- subclade
+    res$pdp_ci_df$Subclade      <- subclade
+    res$imp_results_rf$Subclade <- subclade
+    res$rf_cv$results$Subclade  <- subclade
+    res_list[[subclade]] <- res
+  }
+  res_list
+})
+
+all_summaries_sub_MATMAP <- bind_rows(lapply(subclade_results_MATMAP, `[[`, "summary_table"))
+all_pdp_ci_sub_MATMAP    <- bind_rows(lapply(subclade_results_MATMAP, `[[`, "pdp_ci_df"))
+all_imp_sub_MATMAP       <- bind_rows(lapply(subclade_results_MATMAP, `[[`, "imp_results_rf"))
+
+sig_lookup_sub_MATMAP <- map_dfr(names(subclade_results_MATMAP), function(cl) {
+  tibble(Subclade = cl, feature = subclade_results_MATMAP[[cl]]$sig_vars_rfp)
+})
+
+write.table(all_summaries_sub_MATMAP,
+            file = here::here("plots/RF_validation_subclades_MATMAP.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+all_imp_sig_sub_MATMAP <- all_imp_sub_MATMAP %>%
+  semi_join(sig_lookup_sub_MATMAP, by = c("Subclade", "feature")) %>%
+  mutate(
+    feature = gsub("_", " ", feature),
+    feature = factor(feature, levels = feature_levels_MATMAP)
+  )
+
+# --- Annotation (high-abundance subclades) ---
+
+pos_df_sub_MATMAP <- all_imp_sig_sub_MATMAP %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  group_by(Subclade) %>%
+  reframe(x = max(importance, na.rm = TRUE) * 1.05, y = n() + 0.3)
+
+annot_df_sub_MATMAP <- all_summaries_sub_MATMAP %>%
+  filter(Metric %in% c("10-fold CV R²", "Permuted CV p-value")) %>%
+  dplyr::select(Subclade, Metric, Value) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  dplyr::rename(CV_R2 = `10-fold CV R²`, P_val = `Permuted CV p-value`) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0("atop(CV~R^2==", round(CV_R2, 3), ",italic(P)<",
+                   format.pval(P_num, digits = 2, eps = 1e-3), ")")
+  ) %>%
+  left_join(pos_df_sub_MATMAP, by = "Subclade") %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) %>%
+  mutate(Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG")))
+
+rug_sub_MATMAP <- reshape2::melt(subclade_results_MATMAP$IIIA$rug) %>%
+  dplyr::rename(feature = variable) |>
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP))
+
+# --- High-abundance subclades ---
+
+imp_plot_rf_sub_MATMAP <- all_imp_sig_sub_MATMAP %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG"))) |>
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete[feature_levels_MATMAP],
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(feature_levels_MATMAP)) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(
+                         fill = subclade_colros[names(subclade_colros) %in%
+                                                  c("IIIA", "IC", "IVB", "IIG")][c(3, 1, 4, 2)]
+                       )
+                     )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6), height = 0, linewidth = 1.5) +
+  geom_text(data = annot_df_sub_MATMAP |>
+              dplyr::filter(Subclade %in% c("IIIA", "IC", "IVB", "IIG")),
+            aes(x = 0.0275, y = 1, label = expr),
+            parse = TRUE, inherit.aes = FALSE, hjust = 0, vjust = 0, size = 3) +
+  xlab("importance (RMSE)") +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9), legend.position = "bottom")
+
+pdp_plot_sub_MATMAP <- all_pdp_ci_sub_MATMAP %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry")),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP)) |>
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = subclade_colors_bp, limits = c("IC", "IIG", "IIIA", "IVB")) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_sub_MATMAP, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y = element_text(size = 8), axis.text.x = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_sub_MATMAP)
+
+imp_plot_rf_sub_MATMAP$layers[[3]] <- NULL  # remove annotation for combined plot
+ggarrange(pdp_plot_sub_MATMAP, imp_plot_rf_sub_MATMAP,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(here::here("plots/plots_pdp/pdp_plot_rf_subclades_MAT_MAP_litt_vars.png"),
+       width = width_mm, height = width_mm * 0.5, units = "mm", dpi = 300, bg = "white")
+
+# --- Low-abundance subclades ---
+
+subs_lowAb_MATMAP <- intersect(
+  correct_order[-c(1, 4, 5, 12, 16, 17, 23, 25, 29)],
+  unique(all_imp_sig_sub_MATMAP$Subclade[
+    !all_imp_sig_sub_MATMAP$Subclade %in% c("IC", "IIG", "IIIA", "IVB")])
+)
+
+imp_plot_rf_sub_MATMAP_lowAb <- all_imp_sig_sub_MATMAP %>%
+  dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(Subclade = factor(Subclade, levels = subs_lowAb_MATMAP)) |>
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete[feature_levels_MATMAP],
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(feature_levels_MATMAP)) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(
+                         fill = subclade_colors_bp[subs_lowAb_MATMAP]
+                       )
+                     )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6), height = 0, linewidth = 1.5) +
+  xlab("importance (RMSE)") +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9))
+
+pdp_plot_sub_MATMAP_lowAb <- all_pdp_ci_sub_MATMAP %>%
+  mutate(Clade = case_when(Subclade %in% clade_I_subclades   ~ "I",
+                           Subclade %in% clade_II_subclades  ~ "II",
+                           Subclade %in% clade_III_subclades ~ "III",
+                           Subclade %in% clade_IV_subclades  ~ "IV",
+                           Subclade %in% clade_V_subclades   ~ "V")) %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry")),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP)) |>
+  dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = subclade_colors_bp) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_sub_MATMAP, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(Clade ~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_sub_MATMAP_lowAb)
+
+ggarrange(pdp_plot_sub_MATMAP_lowAb, imp_plot_rf_sub_MATMAP_lowAb,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(here::here("plots/plots_pdp/pdp_plot_rf_subclades_MAT_MAP_litt_vars_lowAb.png"),
+       width = width_mm, height = width_mm * 0.75, units = "mm", dpi = 300)
+```
+
+##### 2D heatmap PDPs — top 4 subclades, MAT & MAP (RF)
+
+```{r pdp-subclades-rf-heatmap-mat-map, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=20, fig.height=12}
+subclades_2d_pdp_rf_MATMAP <- cached(here::here("cache/subclades_2d_pdp_rf_MATMAP.rds"), {
+  map_dfr(top4_subclades, function(sub) {
+    message("Subclade: ", sub)
+    mod  <- subclade_results_MATMAP[[sub]]$rf_full
+    X    <- subclade_results_MATMAP[[sub]]$rug
+    y    <- subclade_results_MATMAP[[sub]]$rf_full$y
+    pred <- Predictor$new(mod, data = X, y = y)
+
+    map_dfr(clim_vars_MATMAP, function(cv) {
+      map_dfr(litter_vars, function(lv) {
+        message("  ", cv, " x ", lv)
+        eff <- FeatureEffect$new(pred, feature = c(cv, lv), method = "pdp", grid.size = 20)
+        eff$results |>
+          dplyr::rename(clim_value = all_of(cv), litter_value = all_of(lv)) |>
+          dplyr::mutate(clim_var = cv, litter_var = lv, Subclade = sub)
+      })
+    })
+  })
+})
+
+heatmap_2d_rf_MATMAP <- function(sub) {
+  subclades_2d_pdp_rf_MATMAP |>
+    dplyr::filter(Subclade == sub) |>
+    mutate(
+      litter_var = gsub("_", " ", litter_var),
+      litter_var = factor(litter_var, levels = gsub("_", " ", litter_vars)),
+      clim_var   = factor(clim_var,   levels = clim_vars_MATMAP)
+    ) |>
+    ggplot(aes(x = litter_value, y = clim_value, fill = .value)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c(name = "Predicted\nabundance",
+                         labels = scales::percent_format(scale = 100)) +
+    facet_grid(clim_var ~ litter_var, scales = "free") +
+    labs(x = "Litter chemistry variable value",
+         y = "Climate variable value", title = sub) +
+    apatheme +
+    theme(plot.title        = element_text(hjust = 0.5, face = "bold", size = 11,
+                                           colour = subclade_colors_bp[sub]),
+          strip.background  = element_rect(fill = NA, colour = "black"),
+          strip.text        = element_text(size = 8),
+          axis.text         = element_text(size = 7),
+          axis.title        = element_text(size = 9),
+          panel.spacing     = unit(0.3, "cm"),
+          legend.key.height = unit(1, "cm"))
+}
+
+ggarrange(plotlist = lapply(top4_subclades, heatmap_2d_rf_MATMAP),
+          ncol = 2, nrow = 2, common.legend = TRUE, legend = "right")
+
+ggsave(here::here("plots/plots_pdp/pdp_heatmap_rf_top4_subclades_MATMAP.png"),
+       width = 300, height = 200, units = "mm", dpi = 300, bg = "white")
+```
+
+##### 2D heatmap PDPs — significant predictors only, MAT & MAP (RF)
+
+```{r pdp-subclades-rf-heatmap-mat-map-sig, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=16, fig.height=10}
+sig_pairs_MATMAP <- lapply(setNames(top4_subclades, top4_subclades), function(sub) {
+  sig      <- subclade_results_MATMAP[[sub]]$sig_vars_rfp
+  sig_clim <- intersect(sig, clim_vars_MATMAP)
+  sig_litt <- intersect(sig, litter_vars)
+  expand.grid(clim_var = sig_clim, litter_var = sig_litt, stringsAsFactors = FALSE)
+})
+sig_pairs_MATMAP <- Filter(function(x) nrow(x) > 0, sig_pairs_MATMAP)
+
+message("Subclades with significant MAT/MAP × litter pairs: ",
+        paste(names(sig_pairs_MATMAP), collapse = ", "))
+
+subclades_2d_pdp_rf_MATMAP_sig <- cached(here::here("cache/subclades_2d_pdp_rf_MATMAP_sig.rds"), {
+  map_dfr(names(sig_pairs_MATMAP), function(sub) {
+    message("Subclade: ", sub)
+    mod  <- subclade_results_MATMAP[[sub]]$rf_full
+    X    <- subclade_results_MATMAP[[sub]]$rug
+    y    <- subclade_results_MATMAP[[sub]]$rf_full$y
+    pred <- Predictor$new(mod, data = X, y = y)
+
+    pmap_dfr(sig_pairs_MATMAP[[sub]], function(clim_var, litter_var) {
+      message("  ", clim_var, " x ", litter_var)
+      eff <- FeatureEffect$new(pred, feature = c(clim_var, litter_var),
+                               method = "pdp", grid.size = 20)
+      eff$results |>
+        dplyr::rename(clim_value = all_of(clim_var), litter_value = all_of(litter_var)) |>
+        dplyr::mutate(clim_var = clim_var, litter_var = litter_var, Subclade = sub)
+    })
+  })
+})
+
+heatmap_2d_rf_MATMAP_sig <- function(sub) {
+  subclades_2d_pdp_rf_MATMAP_sig |>
+    dplyr::filter(Subclade == sub) |>
+    mutate(
+      litter_var = gsub("_", " ", litter_var),
+      litter_var = factor(litter_var, levels = gsub("_", " ", litter_vars)),
+      clim_var   = factor(clim_var,   levels = clim_vars_MATMAP)
+    ) |>
+    ggplot(aes(x = litter_value, y = clim_value, fill = .value)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c(name = "Predicted\nabundance",
+                         labels = scales::percent_format(scale = 100),
+                         limits = c(0, 0.60), oob = scales::squish) +
+    facet_grid(clim_var ~ litter_var, scales = "free") +
+    labs(x = "Litter chemistry variable value",
+         y = "Climate variable value", title = sub) +
+    apatheme +
+    theme(plot.title        = element_text(hjust = 0.5, face = "bold", size = 11,
+                                           colour = subclade_colors_bp[sub]),
+          strip.background  = element_rect(fill = NA, colour = "black"),
+          strip.text        = element_text(size = 8),
+          axis.text         = element_text(size = 7),
+          axis.title        = element_text(size = 9),
+          panel.spacing     = unit(0.3, "cm"),
+          legend.key.height = unit(1, "cm"))
+}
+
+pdp_heatmaps_rf_MATMAP_sig <- lapply(names(sig_pairs_MATMAP), heatmap_2d_rf_MATMAP_sig)
+
+ggarrange(plotlist = pdp_heatmaps_rf_MATMAP_sig,
+          ncol = length(pdp_heatmaps_rf_MATMAP_sig), nrow = 1,
+          common.legend = TRUE, legend = "right")
+
+ggsave(here::here("plots/plots_pdp/pdp_heatmap_rf_top4_subclades_MATMAP_sig_vars.png"),
+       width = 100 * length(pdp_heatmaps_rf_MATMAP_sig), height = 160,
+       units = "mm", dpi = 300, bg = "white")
+```
+
+##### 2D heatmap PDPs — top 4 subclades (GLM)
+
+```{r pdp-subclades-glm-heatmap, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=20, fig.height=12}
+top4_subclades <- c("IIIA", "IC", "IVB", "IIG")
+
+# Compute 2D PDPs for every climate × litter combination for each of the top 4 subclades
+subclades_2d_pdp <- cached(here::here("cache/subclades_2d_pdp.rds"), {
+  map_dfr(top4_subclades, function(sub) {
+    message("Subclade: ", sub)
+    mod  <- subclade_glm_results[[sub]]$glm_full
+    X    <- subclade_glm_results[[sub]]$rug
+    y    <- subclade_glm_results[[sub]]$glm_full$y
+    pred <- Predictor$new(mod, data = X, y = y)
+
+    map_dfr(clim_vars_PC, function(cv) {
+      map_dfr(litter_vars, function(lv) {
+        message("  ", cv, " x ", lv)
+        eff <- FeatureEffect$new(pred, feature = c(cv, lv), method = "pdp", grid.size = 20)
+        eff$results |>
+          dplyr::rename(clim_value = all_of(cv), litter_value = all_of(lv)) |>
+          dplyr::mutate(clim_var = cv, litter_var = lv, Subclade = sub)
+      })
+    })
+  })
+})
+
+# Helper: one heatmap faceted by climate var (rows) × litter var (columns)
+heatmap_2d_pdp <- function(sub) {
+  subclades_2d_pdp |>
+    dplyr::filter(Subclade == sub) |>
+    mutate(
+      clim_var   = dplyr::recode(gsub("[._]", " ", clim_var),
+                                  `PC1 clim` = "PC1", `PC2 clim` = "PC2"),
+      litter_var = gsub("_", " ", litter_var),
+      litter_var = factor(litter_var, levels = gsub("_", " ", litter_vars)),
+      clim_var   = factor(clim_var,   levels = c("PC1", "PC2"))
+    ) |>
+    ggplot(aes(x = litter_value, y = clim_value, fill = .value)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c(name = "Predicted\nabundance",
+                         labels = scales::percent_format(scale = 100)) +
+    facet_grid(clim_var ~ litter_var, scales = "free") +
+    labs(x = "Litter chemistry variable value",
+         y = "Climate variable value",
+         title = sub) +
+    apatheme +
+    theme(plot.title       = element_text(hjust = 0.5, face = "bold", size = 11,
+                                          colour = subclade_colors_bp[sub]),
+          strip.background = element_rect(fill = NA, colour = "black"),
+          strip.text       = element_text(size = 8),
+          axis.text        = element_text(size = 7),
+          axis.title       = element_text(size = 9),
+          panel.spacing    = unit(0.3, "cm"),
+          legend.key.height = unit(1, "cm"))
+}
+
+pdp_heatmaps <- lapply(top4_subclades, heatmap_2d_pdp)
+
+ggarrange(plotlist = pdp_heatmaps, ncol = 2, nrow = 2,
+          common.legend = TRUE, legend = "right")
+
+ggsave(here::here("plots/plots_pdp/pdp_heatmap_glm_top4_subclades.png"),
+       width = 300, height = 200, units = "mm", dpi = 300, bg = "white")
+```
+
+#### GLM + PDP with MAT & MAP as climate variables
+
+##### Clade level — GLM (MAT & MAP)
+
+```{r pdp-clades-glm-mat-map, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+set.seed(711)
+
+clade_glm_results_MATMAP <- cached(here::here("cache/clade_glm_results_MATMAP.rds"), {
+  res_list <- list()
+  for (clade in unique(clades_Ab_md$Clade)) {
+    message("Processing clade: ", clade)
+    df_cl <- clades_Ab_md %>%
+      filter(Clade == clade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_MATMAP))) %>%
+      na.omit()
+    res <- run_glm_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_MATMAP),
+      cv_folds = 10, nrep_vi = 500, n_boot = 100, grid.size = 20)
+    res$summary_table$Clade  <- clade
+    res$pdp_ci_df$Clade      <- clade
+    res$imp_results_rf$Clade <- clade
+    res_list[[clade]] <- res
+  }
+  res_list
+})
+
+all_summaries_glm_MATMAP <- bind_rows(lapply(clade_glm_results_MATMAP, `[[`, "summary_table"))
+all_pdp_ci_glm_MATMAP    <- bind_rows(lapply(clade_glm_results_MATMAP, `[[`, "pdp_ci_df"))
+all_imp_glm_MATMAP       <- bind_rows(lapply(clade_glm_results_MATMAP, `[[`, "imp_results_rf"))
+
+sig_lookup_glm_MATMAP <- map_dfr(names(clade_glm_results_MATMAP), function(cl) {
+  tibble(Clade = cl, feature = clade_glm_results_MATMAP[[cl]]$sig_vars_rfp)
+})
+
+write.table(all_summaries_glm_MATMAP,
+            file = here::here("plots/GLM_validation_clades_MATMAP.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+all_imp_sig_glm_MATMAP <- all_imp_glm_MATMAP %>%
+  semi_join(sig_lookup_glm_MATMAP, by = c("Clade", "feature")) %>%
+  mutate(feature = gsub("_", " ", feature),
+         feature = factor(feature, levels = feature_levels_MATMAP))
+
+pos_df_clade_glm_MATMAP <- all_imp_sig_glm_MATMAP %>%
+  group_by(Clade) %>%
+  reframe(x = max(importance, na.rm = TRUE) * 1.05, y = n() + 0.3)
+
+annot_df_clade_glm_MATMAP <- all_summaries_glm_MATMAP %>%
+  filter(Metric %in% c("10-fold CV R²", "Overall model p-value (F-test)")) %>%
+  dplyr::select(Clade, Metric, Value) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  dplyr::rename(CV_R2 = `10-fold CV R²`, P_val = `Overall model p-value (F-test)`) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0("atop(CV~R^2==", round(CV_R2, 3), ",italic(P)==",
+                   format.pval(P_num, digits = 2, eps = 1e-3), ")")
+  ) %>%
+  left_join(pos_df_clade_glm_MATMAP, by = "Clade") %>%
+  dplyr::filter(!Clade %in% c("V", "UND"))
+
+imp_plot_glm_clades_MATMAP <- all_imp_sig_glm_MATMAP %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% gsub("_", " ", litter_vars) ~ "Litter chemistry",
+                              TRUE ~ "All"),
+         Clade = factor(Clade, levels = c("I", "II", "III", "IV", "V", "UND"))) |>
+  dplyr::filter(Clade != "UND") |>
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete[feature_levels_MATMAP],
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(feature_levels_MATMAP)) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Clade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(fill = clade_colors[-5])
+                     )) +
+  geom_point(position = position_dodge(width = 0.4), size = 2.5) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.4), height = 0, linewidth = 1.5) +
+  geom_text(data = annot_df_clade_glm_MATMAP,
+            aes(x = 0.03, y = 1, label = expr),
+            parse = TRUE, inherit.aes = FALSE, hjust = 0, vjust = 0, size = 3) +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9), legend.position = "bottom")
+
+rug_clades_glm_MATMAP <- reshape2::melt(clade_glm_results_MATMAP$I$rug) %>%
+  dplyr::rename(feature = variable) |>
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP))
+
+pdp_plot_clades_glm_MATMAP <- all_pdp_ci_glm_MATMAP %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry")),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP)) |>
+  dplyr::filter(!Clade %in% c("UND", "V")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Clade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "UND")) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_clades_glm_MATMAP, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y  = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text   = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_clades_glm_MATMAP)
+print(imp_plot_glm_clades_MATMAP)
+
+ggarrange(pdp_plot_clades_glm_MATMAP, imp_plot_glm_clades_MATMAP,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(here::here("plots/plots_pdp/pdp_plot_glm_clades_MAT_MAP_litt_vars.png"),
+       width = width_mm, height = width_mm * 0.5, units = "mm", dpi = 300)
+```
+
+##### Subclade level — GLM (MAT & MAP)
+
+```{r pdp-subclades-glm-mat-map, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+set.seed(711)
+
+subclade_glm_results_MATMAP <- cached(here::here("cache/subclade_glm_results_MATMAP.rds"), {
+  res_list <- list()
+  for (subclade in unique(subclades_Ab_md$Subclade)) {
+    message("Processing subclade: ", subclade)
+    df_cl <- subclades_Ab_md %>%
+      filter(Subclade == subclade) %>%
+      dplyr::select(all_of(c("Abundance", litter_vars, clim_vars_MATMAP))) %>%
+      na.omit()
+    res <- run_glm_analysis(
+      df           = df_cl,
+      response_var = "Abundance",
+      predictors   = c(litter_vars, clim_vars_MATMAP),
+      cv_folds = 10, nrep_vi = 100, n_boot = 100, grid.size = 20)
+    res$summary_table$Subclade  <- subclade
+    res$pdp_ci_df$Subclade      <- subclade
+    res$imp_results_rf$Subclade <- subclade
+    res_list[[subclade]] <- res
+  }
+  res_list
+})
+
+all_summaries_glm_sub_MATMAP <- bind_rows(lapply(subclade_glm_results_MATMAP, `[[`, "summary_table"))
+all_pdp_ci_glm_sub_MATMAP    <- bind_rows(lapply(subclade_glm_results_MATMAP, `[[`, "pdp_ci_df"))
+all_imp_glm_sub_MATMAP       <- bind_rows(lapply(subclade_glm_results_MATMAP, `[[`, "imp_results_rf"))
+
+sig_lookup_glm_sub_MATMAP <- map_dfr(names(subclade_glm_results_MATMAP), function(cl) {
+  tibble(Subclade = cl, feature = subclade_glm_results_MATMAP[[cl]]$sig_vars_rfp)
+})
+
+write.table(all_summaries_glm_sub_MATMAP,
+            file = here::here("plots/GLM_validation_subclades_MATMAP.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+all_imp_sig_glm_sub_MATMAP <- all_imp_glm_sub_MATMAP %>%
+  semi_join(sig_lookup_glm_sub_MATMAP, by = c("Subclade", "feature")) %>%
+  mutate(feature = gsub("_", " ", feature),
+         feature = factor(feature, levels = feature_levels_MATMAP))
+
+# --- Annotation (high-abundance subclades) ---
+
+pos_df_glm_sub_MATMAP <- all_imp_sig_glm_sub_MATMAP %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  group_by(Subclade) %>%
+  reframe(x = max(importance, na.rm = TRUE) * 1.05, y = n() + 0.3)
+
+annot_df_glm_sub_MATMAP <- all_summaries_glm_sub_MATMAP %>%
+  filter(Metric %in% c("10-fold CV R²", "Overall model p-value (F-test)")) %>%
+  dplyr::select(Subclade, Metric, Value) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  dplyr::rename(CV_R2 = `10-fold CV R²`, P_val = `Overall model p-value (F-test)`) %>%
+  mutate(
+    CV_R2 = as.numeric(CV_R2),
+    P_num = as.numeric(sub("^<", "", P_val)),
+    expr  = paste0("atop(CV~R^2==", round(CV_R2, 3), ",italic(P)==",
+                   format.pval(P_num, digits = 2, eps = 1e-3), ")")
+  ) %>%
+  left_join(pos_df_glm_sub_MATMAP, by = "Subclade") %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) %>%
+  mutate(Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG")))
+
+rug_glm_sub_MATMAP <- reshape2::melt(subclade_glm_results_MATMAP$IIIA$rug) %>%
+  dplyr::rename(feature = variable) |>
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP))
+
+# --- High-abundance subclades ---
+
+imp_plot_glm_sub_MATMAP <- all_imp_sig_glm_sub_MATMAP %>%
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG"))) |>
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete[feature_levels_MATMAP],
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(feature_levels_MATMAP)) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(
+                         fill = subclade_colros[names(subclade_colros) %in%
+                                                  c("IIIA", "IC", "IVB", "IIG")][c(4, 1, 3, 2)]
+                       )
+                     )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6), height = 0, linewidth = 1.5) +
+  geom_text(data = annot_df_glm_sub_MATMAP |>
+              dplyr::filter(Subclade %in% c("IIIA", "IC", "IVB", "IIG")),
+            aes(x = 0.0275, y = 1, label = expr),
+            parse = TRUE, inherit.aes = FALSE, hjust = 0, vjust = 0, size = 3) +
+  xlab("importance (RMSE)") +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9), legend.position = "bottom")
+
+pdp_plot_glm_sub_MATMAP <- all_pdp_ci_glm_sub_MATMAP %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry")),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP)) |>
+  dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = subclade_colors_bp, limits = c("IC", "IIG", "IIIA", "IVB")) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_glm_sub_MATMAP, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y = element_text(size = 8), axis.text.x = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_glm_sub_MATMAP)
+
+imp_plot_glm_sub_MATMAP$layers[[3]] <- NULL
+ggarrange(pdp_plot_glm_sub_MATMAP, imp_plot_glm_sub_MATMAP,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(here::here("plots/plots_pdp/pdp_plot_glm_subclades_MAT_MAP_litt_vars.png"),
+       width = width_mm, height = width_mm * 0.5, units = "mm", dpi = 300, bg = "white")
+
+# --- Low-abundance subclades ---
+
+subs_lowAb_glm_MATMAP <- intersect(
+  correct_order[-c(1, 4, 5, 12, 16, 17, 23, 25, 29)],
+  unique(all_imp_sig_glm_sub_MATMAP$Subclade[
+    !all_imp_sig_glm_sub_MATMAP$Subclade %in% c("IC", "IIG", "IIIA", "IVB")])
+)
+
+imp_plot_glm_sub_MATMAP_lowAb <- all_imp_sig_glm_sub_MATMAP %>%
+  dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  mutate(Subclade = factor(Subclade, levels = subs_lowAb_glm_MATMAP)) |>
+  ggplot(aes(x = importance, y = feature, color = feature)) +
+  scale_color_manual(values = allvars_pallete[feature_levels_MATMAP],
+                     guide = guide_legend(ncol = 2)) +
+  scale_y_discrete(limits = rev(feature_levels_MATMAP)) +
+  scale_x_continuous(labels = scales::percent_format()) +
+  ggh4x::facet_grid2(Subclade ~ ., scales = "free_y", space = "free_y",
+                     strip = ggh4x::strip_themed(
+                       background_y = ggh4x::elem_list_rect(
+                         fill = subclade_colors_bp[subs_lowAb_glm_MATMAP]
+                       )
+                     )) +
+  geom_point(position = position_dodge(width = 0.6), size = 3) +
+  geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
+                 position = position_dodge(width = 0.6), height = 0, linewidth = 1.5) +
+  xlab("importance (RMSE)") +
+  apatheme +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(),
+        axis.line.y = element_blank(), strip.text = element_text(size = 10),
+        panel.grid.major.x = element_line(colour = "grey90"),
+        panel.border = element_rect(colour = "grey90", fill = NA, linewidth = 0.5),
+        legend.spacing = unit(0.1, "cm"), legend.key.size = unit(0.3, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.text = element_text(size = 9))
+
+pdp_plot_glm_sub_MATMAP_lowAb <- all_pdp_ci_glm_sub_MATMAP %>%
+  mutate(Clade = case_when(Subclade %in% clade_I_subclades   ~ "I",
+                           Subclade %in% clade_II_subclades  ~ "II",
+                           Subclade %in% clade_III_subclades ~ "III",
+                           Subclade %in% clade_IV_subclades  ~ "IV",
+                           Subclade %in% clade_V_subclades   ~ "V")) %>%
+  mutate(var_type = case_when(feature %in% clim_vars_MATMAP ~ "Climate",
+                              feature %in% litter_vars       ~ "Litter chemistry",
+                              TRUE ~ NA_character_)) |>
+  mutate(var_type = factor(var_type, levels = c("Climate", "Litter chemistry")),
+         feature  = gsub("_", " ", feature),
+         feature  = factor(feature, levels = feature_levels_MATMAP)) |>
+  dplyr::filter(!Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
+  ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = percent_format(scale = 100)) +
+  scale_color_manual(values = subclade_colors_bp) +
+  scale_linetype_manual(name = NULL,
+                        values = c("TRUE" = "solid", "FALSE" = "longdash"),
+                        labels = c(expression(P > 0.05), expression(P < 0.05))) +
+  geom_rug(data = rug_glm_sub_MATMAP, aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(Clade ~ var_type + feature, scales = "free_x") +
+  labs(x = "Variable value", y = "Predicted relative abundance") +
+  guides(color = "none", fill = "none",
+         linetype = guide_legend(order = 1, override.aes = list(size = 1))) +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        axis.text.y = element_text(size = 8),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10),
+        legend.position = c(0.02, 0.98), legend.justification = c(0, 1),
+        legend.background = element_rect(fill = alpha("white", 0.7), colour = "black"),
+        legend.key.size = unit(0.3, "cm"), legend.text = element_text(size = 6),
+        legend.key.width = unit(1, "cm"), legend.key.height = unit(0.5, "cm"),
+        legend.title = element_text(size = 8))
+
+print(pdp_plot_glm_sub_MATMAP_lowAb)
+
+ggarrange(pdp_plot_glm_sub_MATMAP_lowAb, imp_plot_glm_sub_MATMAP_lowAb,
+          labels = "AUTO", ncol = 2, common.legend = F,
+          legend = "bottom", widths = c(1.5, 0.5), hjust = -0.05, vjust = 1)
+
+ggsave(here::here("plots/plots_pdp/pdp_plot_glm_subclades_MAT_MAP_litt_vars_lowAb.png"),
+       width = width_mm, height = width_mm * 0.75, units = "mm", dpi = 300)
+```
+
+##### 2D heatmap PDPs — top 4 subclades, MAT & MAP (GLM)
+
+```{r pdp-subclades-glm-heatmap-mat-map, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=20, fig.height=12}
+subclades_2d_pdp_glm_MATMAP <- cached(here::here("cache/subclades_2d_pdp_glm_MATMAP.rds"), {
+  map_dfr(top4_subclades, function(sub) {
+    message("Subclade: ", sub)
+    mod  <- subclade_glm_results_MATMAP[[sub]]$glm_full
+    X    <- subclade_glm_results_MATMAP[[sub]]$rug
+    y    <- subclade_glm_results_MATMAP[[sub]]$glm_full$y
+    pred <- Predictor$new(mod, data = X, y = y)
+
+    map_dfr(clim_vars_MATMAP, function(cv) {
+      map_dfr(litter_vars, function(lv) {
+        message("  ", cv, " x ", lv)
+        eff <- FeatureEffect$new(pred, feature = c(cv, lv), method = "pdp", grid.size = 20)
+        eff$results |>
+          dplyr::rename(clim_value = all_of(cv), litter_value = all_of(lv)) |>
+          dplyr::mutate(clim_var = cv, litter_var = lv, Subclade = sub)
+      })
+    })
+  })
+})
+
+heatmap_2d_glm_MATMAP <- function(sub) {
+  subclades_2d_pdp_glm_MATMAP |>
+    dplyr::filter(Subclade == sub) |>
+    mutate(litter_var = gsub("_", " ", litter_var),
+           litter_var = factor(litter_var, levels = gsub("_", " ", litter_vars)),
+           clim_var   = factor(clim_var,   levels = clim_vars_MATMAP)) |>
+    ggplot(aes(x = litter_value, y = clim_value, fill = .value)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c(name = "Predicted\nabundance",
+                         labels = scales::percent_format(scale = 100)) +
+    facet_grid(clim_var ~ litter_var, scales = "free") +
+    labs(x = "Litter chemistry variable value",
+         y = "Climate variable value", title = sub) +
+    apatheme +
+    theme(plot.title        = element_text(hjust = 0.5, face = "bold", size = 11,
+                                           colour = subclade_colors_bp[sub]),
+          strip.background  = element_rect(fill = NA, colour = "black"),
+          strip.text        = element_text(size = 8),
+          axis.text         = element_text(size = 7),
+          axis.title        = element_text(size = 9),
+          panel.spacing     = unit(0.3, "cm"),
+          legend.key.height = unit(1, "cm"))
+}
+
+ggarrange(plotlist = lapply(top4_subclades, heatmap_2d_glm_MATMAP),
+          ncol = 2, nrow = 2, common.legend = TRUE, legend = "right")
+
+ggsave(here::here("plots/plots_pdp/pdp_heatmap_glm_top4_subclades_MATMAP.png"),
+       width = 300, height = 200, units = "mm", dpi = 300, bg = "white")
+```
+
+##### 2D heatmap PDPs — significant predictors only, MAT & MAP (GLM)
+
+```{r pdp-subclades-glm-heatmap-mat-map-sig, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=16, fig.height=10}
+sig_pairs_glm_MATMAP <- lapply(setNames(top4_subclades, top4_subclades), function(sub) {
+  sig      <- subclade_glm_results_MATMAP[[sub]]$sig_vars_rfp
+  sig_clim <- intersect(sig, clim_vars_MATMAP)
+  sig_litt <- intersect(sig, litter_vars)
+  expand.grid(clim_var = sig_clim, litter_var = sig_litt, stringsAsFactors = FALSE)
+})
+sig_pairs_glm_MATMAP <- Filter(function(x) nrow(x) > 0, sig_pairs_glm_MATMAP)
+
+message("Subclades with significant MAT/MAP × litter pairs (GLM): ",
+        paste(names(sig_pairs_glm_MATMAP), collapse = ", "))
+
+subclades_2d_pdp_glm_MATMAP_sig <- cached(here::here("cache/subclades_2d_pdp_glm_MATMAP_sig.rds"), {
+  map_dfr(names(sig_pairs_glm_MATMAP), function(sub) {
+    message("Subclade: ", sub)
+    mod  <- subclade_glm_results_MATMAP[[sub]]$glm_full
+    X    <- subclade_glm_results_MATMAP[[sub]]$rug
+    y    <- subclade_glm_results_MATMAP[[sub]]$glm_full$y
+    pred <- Predictor$new(mod, data = X, y = y)
+
+    pmap_dfr(sig_pairs_glm_MATMAP[[sub]], function(clim_var, litter_var) {
+      message("  ", clim_var, " x ", litter_var)
+      eff <- FeatureEffect$new(pred, feature = c(clim_var, litter_var),
+                               method = "pdp", grid.size = 20)
+      eff$results |>
+        dplyr::rename(clim_value = all_of(clim_var), litter_value = all_of(litter_var)) |>
+        dplyr::mutate(clim_var = clim_var, litter_var = litter_var, Subclade = sub)
+    })
+  })
+})
+
+heatmap_2d_glm_MATMAP_sig <- function(sub) {
+  subclades_2d_pdp_glm_MATMAP_sig |>
+    dplyr::filter(Subclade == sub) |>
+    mutate(litter_var = gsub("_", " ", litter_var),
+           litter_var = factor(litter_var, levels = gsub("_", " ", litter_vars)),
+           clim_var   = factor(clim_var,   levels = clim_vars_MATMAP)) |>
+    ggplot(aes(x = litter_value, y = clim_value, fill = .value)) +
+    geom_raster(interpolate = TRUE) +
+    scale_fill_viridis_c(name = "Predicted\nabundance",
+                         labels = scales::percent_format(scale = 100),
+                         limits = c(0, 0.60), oob = scales::squish) +
+    facet_grid(clim_var ~ litter_var, scales = "free") +
+    labs(x = "Litter chemistry variable value",
+         y = "Climate variable value", title = sub) +
+    apatheme +
+    theme(plot.title        = element_text(hjust = 0.5, face = "bold", size = 11,
+                                           colour = subclade_colors_bp[sub]),
+          strip.background  = element_rect(fill = NA, colour = "black"),
+          strip.text        = element_text(size = 8),
+          axis.text         = element_text(size = 7),
+          axis.title        = element_text(size = 9),
+          panel.spacing     = unit(0.3, "cm"),
+          legend.key.height = unit(1, "cm"))
+}
+
+pdp_heatmaps_glm_MATMAP_sig <- lapply(names(sig_pairs_glm_MATMAP), heatmap_2d_glm_MATMAP_sig)
+
+ggarrange(plotlist = pdp_heatmaps_glm_MATMAP_sig,
+          ncol = length(pdp_heatmaps_glm_MATMAP_sig), nrow = 1,
+          common.legend = TRUE, legend = "right")
+
+ggsave(here::here("plots/plots_pdp/pdp_heatmap_glm_top4_subclades_MATMAP_sig_vars.png"),
+       width = 100 * length(pdp_heatmaps_glm_MATMAP_sig), height = 160,
+       units = "mm", dpi = 300, bg = "white")
+```

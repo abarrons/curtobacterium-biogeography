@@ -1,0 +1,164 @@
+---
+title: "01 — Load Data"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+library(gplots)
+library(ggpubr)
+library(sp)
+library(dismo)
+library(ggrepel)
+library(scales)
+library(extrafont)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+#### Load Data
+
+```{r load-data, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+# Read count table
+data <- read.table(here::here("count_table.txt"), header = TRUE, sep = '\t')
+
+# Read mapping colors file
+mapping_colors <- read.table(here::here("data/clade_colors.txt"), header = T, sep = "\t", comment.char = "")
+mapping_colors <- mapping_colors[-c(1:7),]
+
+# Clade colors
+clds <- c("I", "II", "III", "IV", "V", "UND")
+clade_colors <- setNames(mapping_colors[match(clds, mapping_colors$variable), 2],
+                         mapping_colors[match(clds, mapping_colors$variable), 1])
+
+subclds <- mapping_colors$variable[!mapping_colors$variable %in% clds]
+subclade_colros <- setNames(mapping_colors[mapping_colors$variable %in% subclds, 2],
+                            mapping_colors[mapping_colors$variable %in% subclds, 1])
+
+# Rename column names with sample ID
+colnames(data) <- sub("X", "", colnames(data))
+colnames(data) <- sub("\\.", "", colnames(data))
+data <- column_to_rownames(data, "genomeID")
+
+# Load resequenced samples and replace in original count table
+data_reseq <- read.table(here::here("parse_results_new/count_table.txt"),
+                         header = T, sep = "\t", row.names = 1, check.names = F)
+samples_to_replace <- colnames(data_reseq)
+
+data <- data |>
+  dplyr::select(!any_of(samples_to_replace)) |>
+  bind_cols(data_reseq)
+
+# Read DB metadata and rename row IDs
+dbmd <- read.table(here::here("data/masterMD4DB.txt"))
+rownames(data) <- dbmd$V4[match(rownames(data), dbmd$V5)]
+
+# Build taxonomy table: genus, clade, subclade
+tax <- data.frame(rownames(data))
+colnames(tax)[1] <- "genomeID"
+tax$genus <- dbmd$V1[match(tax$genomeID, dbmd$V4)]
+
+master_md <- read.table(here::here("data/master_md_all_sequenced_Isolates_with_extendedMD.txt"),
+                        header = T, sep = "\t")
+tax <- merge(tax, master_md[, c(2, 3, 9)], by.x = "genomeID", by.y = "Name", all.x = T)
+tax <- column_to_rownames(tax, "genomeID")
+tax <- as.matrix(tax)
+
+# Import metadata
+metadata <- read.table(here::here("data/reserve_sample_data.txt"),
+                       header = TRUE, sep = '\t', quote = "")
+
+# Fix encoding for degree symbol in coordinates
+Encoding(metadata$plot_cordsX) <- "MacRoman"
+metadata$plot_cordsX <- iconv(metadata$plot_cordsX, from = "MacRoman", to = "UTF-8")
+Encoding(metadata$plot_cordsY) <- "MacRoman"
+metadata$plot_cordsY <- iconv(metadata$plot_cordsY, from = "MacRoman", to = "UTF-8")
+
+# Convert DMS coordinates to decimal
+metadata$plot_cordsX <- gsub('"', 's', metadata$plot_cordsX)
+metadata$plot_cordsX <- gsub("\u00B0", "d", metadata$plot_cordsX, fixed = TRUE)
+metadata$plot_cordsX <- gsub("\u00BA", "d", metadata$plot_cordsX, fixed = TRUE)
+metadata$plot_cordsX <- gsub("'", "m", metadata$plot_cordsX)
+metadata$plot_cordsX <- gsub("ss", "S", metadata$plot_cordsX)
+metadata$plot_cordsX <- gsub("s", "", metadata$plot_cordsX)
+metadata$plot_cordsX <- char2dms(metadata$plot_cordsX, chd = 'd', chm = 'm', chs = 'S') %>% as.numeric()
+
+metadata$plot_cordsY <- gsub('"', 's', metadata$plot_cordsY)
+metadata$plot_cordsY <- gsub("\u00B0", "d", metadata$plot_cordsY, fixed = TRUE)
+metadata$plot_cordsY <- gsub("\u00BA", "d", metadata$plot_cordsY, fixed = TRUE)
+metadata$plot_cordsY <- gsub("'", "m", metadata$plot_cordsY)
+metadata$plot_cordsY <- gsub("ss", "S", metadata$plot_cordsY)
+metadata$plot_cordsY <- gsub("s", "", metadata$plot_cordsY)
+metadata$plot_cordsY <- char2dms(metadata$plot_cordsY, chd = 'd', chm = 'm', chs = 'S') %>% as.numeric()
+
+metadata <- metadata %>%
+  mutate(Litter_type = ifelse(Litter_type == "Dominant Vegetation", "DV", "G"))
+
+reserve_colors <- c(
+  "#CBD588", "#5F7FC7", "#FFA500","#DA5724", "#CD9BCD", 
+  "#AD6F3B", "#673770","#D14285", "#652926", "#C84248", 
+  "#8569D5", "#FFC0CB", "#8A7C64",
+  "#0000FF", "#483D8B", "#ADD8E6", "#008B8B", "#8B6508", "#8B0000",
+  "#006400", "#D1A33D", "#8B4500", "#A020F0", "#FA8072")
+
+
+# Add reserve code abbreviations
+reserve_names <- c(
+  "Blue Oak Ranch Reserve", "Hastings Natural History Reservation", "Bodega Marine Reserve",
+  "Jepson Prairie Reserve", "McLaughlin Natural Reserve", "Quail Ridge Reserve",
+  "Steele/Burnand Anza-Borrego Desert Research Center", "White Mountain Research Center",
+  "Merced Vernal Pools and Grassland Reserve", "Yosemite Field Station",
+  "Emerson Oaks Reserve", "James San Jacinto Mountains Reserve", "Motte Rimrock Reserve",
+  "Sweeney Granite Mountains Desert Research Center", "Elliott Chaparral Reserve",
+  "Scripps Coastal Reserve", "Coal Oil Point Natural Reserve",
+  "Kenneth S. Norris Rancho Marino Reserve", "Sedgwick Reserve",
+  "Sierra Nevada Aquatic Research Laboratory", "Valentine Camp",
+  "Fort Ord Natural Reserve", "Landels-Hill Big Creek Reserve", "Younger Lagoon Reserve"
+)
+
+codenames <- c(
+  "BLOK", "HAST", "BOMR", "JEP", "McLL", "QUIL", "AZBR", "WMRC", "MER", "YOS",
+  "EMR", "JMS", "MOT", "MOJ", "ELCR", "SCPS", "COP", "KNRM", "SGWK", "SNARL",
+  "VAL", "FORD", "BGSR", "YLR"
+)
+
+reserve_codenames   <- data.frame(ReserveName = reserve_names, CodeName = codenames, color = reserve_colors)
+color_mapping_vector <- setNames(reserve_codenames$color, reserve_codenames$CodeName)
+metadata <- metadata %>%
+  mutate(reserve_code = reserve_codenames$CodeName[match(metadata$Reserve, reserve_codenames$ReserveName)])
+```
+
+```{r metadatasummary table, include=FALSE}
+metadata_summary <- metadata |>
+  distinct(Reserve, Litter_type, .keep_all = TRUE) |>
+  dplyr::select(-c(ID_Number, SampleID, Litter_species_common_name, pH))
+
+writexl::write_xlsx(metadata_summary, here::here("results/metadata_summary.xlsx"))
+
+
+```
+
+```{r save-rds, include=FALSE}
+saveRDS(data, here::here("results/rds/data_rpk.rds"))
+saveRDS(tax, here::here("results/rds/tax.rds"))
+saveRDS(metadata, here::here("results/rds/metadata_raw.rds"))
+saveRDS(clade_colors, here::here("results/rds/clade_colors.rds"))
+saveRDS(subclade_colros, here::here("results/rds/subclade_colros.rds"))
+saveRDS(reserve_codenames, here::here("results/rds/reserve_codenames.rds"))
+saveRDS(color_mapping_vector, here::here("results/rds/color_mapping_vector.rds"))
+```

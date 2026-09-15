@@ -1,0 +1,217 @@
+---
+title: "04 — Normalize and Build Phyloseq"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+metadata <- readRDS(here::here("results/rds/metadata_climate.rds"))
+data <- readRDS(here::here("results/rds/data_rpk.rds"))
+tax <- readRDS(here::here("results/rds/tax.rds"))
+litter_md <- readRDS(here::here("results/rds/litter_md.rds"))
+pca_litt_df_md <- readRDS(here::here("results/rds/pca_litt_df_md.rds"))
+pcadf <- readRDS(here::here("results/rds/pcadf_clim.rds"))
+```
+
+##### All environmental variables PCA
+
+```{r all-env-pca}
+colnames(metadata) <- gsub(" ", "_", colnames(metadata))
+highlyCorrelated   <- gsub(" ", "_", highlyCorrelated)
+
+pca_all <- prcomp(~ pH + crude_protein + cellulose + hemicellulose + lignin +
+                    MAT + T_Iso + T_Diurn + T_Seas + T_MaxWarmMo + T_Range +
+                    T_DryQ + T_WetQ + T_WarmQ + T_MinColdMo + T_ColdQ +
+                    MAP + P_WetMo + P_DryMo + P_WetQ + P_DryQ + P_WarmQ + P_ColdQ + P_Seas,
+                  data = metadata[, c(13, 17:19, 21:40)],
+                  center = T, scale. = T, na.action = na.exclude)
+
+pcadf_all         <- data.frame(pca_all$x)
+metadata$PC1      <- pcadf_all$PC1
+metadata$PC2      <- pcadf_all$PC2
+PCAloads_all      <- data.frame(Variables = rownames(pca_all$rotation), pca_all$rotation)
+summary(pca_all)
+
+pca_all_sq_loadings   <- pca_all$rotation^2
+pca_all_contributions <- sweep(pca_all_sq_loadings, 2, colSums(pca_all_sq_loadings), FUN = "/") * 100
+print(pca_all_contributions)
+
+pca_all_contributions <- as.data.frame(pca_all_contributions) |>
+  rownames_to_column(var = "Variable") |>
+  pivot_longer(cols = c(2:10), names_to = "PC", values_to = "Percent") |>
+  mutate(Variable = factor(Variable, levels = c(
+    "MAT","T_Iso","T_Diurn","T_Seas","T_MaxWarmMo","T_Range","T_DryQ","T_WetQ",
+    "T_WarmQ","T_MinColdMo","T_ColdQ","MAP","P_WetMo","P_DryMo","P_WetQ","P_DryQ",
+    "P_WarmQ","P_ColdQ","P_Seas","cellulose","crude_protein","hemicellulose","lignin","pH")))
+
+pca_all_contributions_plot <- pca_all_contributions |>
+  filter(PC %in% c("PC1", "PC2")) |>
+  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
+  geom_col() +
+  scale_fill_manual(values = allvars_pallete) +
+  labs(y = "% of variance contribution") +
+  guides(fill = guide_legend(ncol = 1)) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(), text = element_text(size = 22))
+pca_all_contributions_plot
+
+pca_all_plot <- ggplot(metadata, aes(PC1, PC2)) +
+  geom_point(data = metadata, aes(color = Ecosystem, shape = Litter_type), size = 10, alpha = 0.75) +
+  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
+  geom_segment(data = PCAloads_all,
+               aes(x = 0, xend = PC1 * 10, y = 0, yend = PC2 * 10),
+               colour = "grey", inherit.aes = FALSE) +
+  ggrepel::geom_label_repel(data = PCAloads_all,
+                             aes(x = PC1 * 10.7, y = PC2 * 10.7, label = Variables),
+                             size = 6, colour = "darkblue",
+                             label.padding = unit(0.2, "lines"), label.size = 0.25) +
+  xlab("PC1 (31.78%)") + ylab("PC2 (27.70%)") +
+  guides(color = guide_legend(title.position = "top"),
+         shape = guide_legend(title.position = "top", title = "Litter type")) +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        text = element_text(size = 22), legend.position = "bottom")
+pca_all_plot
+
+ggarrange(pca_all_plot, pca_all_contributions_plot, nrow = 1, widths = c(1, 0.5))
+ggsave(here::here("plots/PCAs/allvars_pca_ecosystem.png"),
+       width = 60, height = 40, units = "cm", dpi = 320, bg = "white")
+
+metadata <- metadata[, -which(colnames(metadata) %in% c("PC1", "PC2"))]
+colnames(metadata)[22:40] <- gsub("_", " ", colnames(metadata[22:40]))
+
+metadata_rd <- metadata |>
+  filter(str_ends(SampleID, "1|2")) %>%
+  pivot_longer(cols = where(is.numeric), names_to = "variable", values_to = "value") %>%
+  group_by(variable) %>%
+  reframe(
+    mean = round(mean(value, na.rm = TRUE), 2),
+    max  = round(max(value, na.rm = TRUE), 2),
+    min  = round(min(value, na.rm = TRUE), 2)
+  )
+```
+
+##### Normalize count table by total gene lengths by genome
+
+```{r count-table-normalization, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+dbmd <- read.table(here::here("data/masterMD4DB.txt"))
+
+gene_lengts_by_genome <- read.table(
+  here::here("data/gene_lengths_by_genome.csv"),
+  row.names = 1, header = T, sep = ",", check.names = F)
+
+only_curto_gl <- gene_lengts_by_genome |>
+  dplyr::select(any_of(as.data.frame(tax) |>
+                         dplyr::filter(genus == "Curtobacterium") |>
+                         row.names()))
+
+colnames(gene_lengts_by_genome) <- dbmd$V4[match(colnames(gene_lengts_by_genome), dbmd$V3)]
+
+genome_names <- colnames(gene_lengts_by_genome)
+strain_names <- rownames(data)
+
+missing_in_gene_lengths <- setdiff(strain_names, genome_names)
+missing_in_counts       <- setdiff(genome_names, strain_names)
+cat("Strains missing in gene_lengths:\n"); print(missing_in_gene_lengths)
+cat("Genomes missing in counts:\n");       print(missing_in_counts)
+
+data <- data[!rownames(data) %in% missing_in_gene_lengths, ]
+
+total_gene_lengths <- colSums(gene_lengts_by_genome)
+total_gene_lengths <- total_gene_lengths[rownames(data)]
+all.equal(names(total_gene_lengths), rownames(data))
+
+rpk_table <- round(sweep(data, 1, total_gene_lengths, FUN = "/") * 1e6)
+sort(colSums(rpk_table))
+```
+
+#### Create phyloseq object
+
+```{r create-phyloseq, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+row.names(metadata) <- metadata$SampleID
+metadata <- metadata[, -5]
+
+missing_samples <- union(setdiff(rownames(metadata), colnames(rpk_table)),
+                         setdiff(colnames(rpk_table), rownames(metadata)))
+metadata <- metadata %>% filter(!(rownames(.) %in% missing_samples))
+
+count_table <- otu_table(rpk_table, taxa_are_rows = TRUE)
+tax         <- as.matrix(tax)
+taxonomy    <- tax_table(tax)
+sam_data    <- sample_data(metadata)
+mg          <- phyloseq(count_table, taxonomy, sam_data)
+mg
+
+# tax table as data frame for later use
+tax <- as.data.frame(tax)
+
+sam_data_df <- data.frame(mg@sam_data) |>
+  dplyr::mutate(merging_id = case_when(
+    grepl("3$", SampleID) ~ sub("3$", "1", SampleID),
+    grepl("4$", SampleID) ~ sub("4$", "2", SampleID),
+    TRUE ~ SampleID
+  ))
+mg@sam_data <- sample_data(sam_data_df)
+
+mg_mer <- merge_samples(mg, group = "merging_id", fun = mean)
+
+otu_matrix  <- as.matrix(t(otu_table(mg_mer)))
+otu_averaged <- apply(otu_matrix, 2, function(x) round(x / 2))
+otu_averaged <- otu_averaged[, colnames(otu_matrix)]
+otu_table(mg_mer) <- otu_table(otu_averaged, taxa_are_rows = TRUE)
+print(otu_table(mg_mer))
+
+mgmer_SDtemp <- data.frame(mg_mer@sam_data) %>%
+  dplyr::select(-c(reserve_litter,
+                   Reserve,
+                   SampleID,
+                   Ecosystem,
+                   Litter_type,
+                   Litter_species,
+                   Litter_species_common_name,
+                   Plant_family,
+                   Plant_type,
+                   reserve_code,
+                   crude_protein,
+                   cellulose,
+                   hemicellulose,
+                   Structural_Carbohydrates,
+                   lignin,
+                   merging_id)) %>%
+  merge(., litter_md |> dplyr::select(-c(plot_cordsX, plot_cordsY, Elevation, pH)),
+        by = "row.names") %>%
+  mutate(reserve_litter = paste(reserve_code, Litter_type, sep = "-")) |>
+  column_to_rownames("Row.names")
+colnames(mgmer_SDtemp) <- gsub("\\.", " ", colnames(mgmer_SDtemp))
+print(colnames(mgmer_SDtemp))
+
+sample_data(mg_mer) <- mgmer_SDtemp
+mg <- mg_mer
+rm(mgmer_SDtemp)
+```
+
+```{r save-rds, include=FALSE}
+saveRDS(mg, here::here("results/rds/mg.rds"))
+saveRDS(metadata, here::here("results/rds/metadata_final.rds"))
+saveRDS(sam_data, here::here("results/rds/sam_data.rds"))
+```

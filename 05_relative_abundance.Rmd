@@ -1,0 +1,605 @@
+---
+title: "05 — Relative Abundance"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+library(EcolUtils)
+library(ggpubr)
+library(ggrepel)
+library(ggh4x)
+library(iml)
+library(randomForest)
+library(scales)
+library(reshape2)
+library(rfPermute)
+library(extrafont)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+extrafont::loadfonts(device = "pdf", quiet = TRUE)
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+mg <-              readRDS(here::here("results/rds/mg.rds"))
+metadata <-        readRDS(here::here("results/rds/metadata_final.rds"))
+sam_data <-        readRDS(here::here("results/rds/sam_data.rds"))
+pca_litt_df_md <-  readRDS(here::here("results/rds/pca_litt_df_md.rds"))
+pcadf <-           readRDS(here::here("results/rds/pcadf_clim.rds"))
+clade_colors <-    readRDS(here::here("results/rds/clade_colors.rds"))
+subclade_colros <- readRDS(here::here("results/rds/subclade_colros.rds"))
+subclds <- names(subclade_colros)
+color_mapping_vector <- readRDS(here::here("results/rds/color_mapping_vector.rds"))
+litter_md <- readRDS(here::here("results/rds/litter_md.rds"))
+```
+
+### Total count and relative abundance plots
+
+```{r rarefaction-genus, message=FALSE, warning=FALSE, results='hold', echo=FALSE, include=FALSE}
+mg_un_curto <- subset_taxa(mg, genus == "Curtobacterium")
+
+curto_counts <- as.data.frame(sort(sample_sums(mg_un_curto), decreasing = T))
+colnames(curto_counts)[1] <- "count"
+curto_counts$sampleID <- row.names(curto_counts)
+
+genus_data <- read.table(here::here("GTDB_genus_abundance_table.tsv"),
+                         header = TRUE, sep = '\t')
+colnames(genus_data) <- sub("X", "", colnames(genus_data))
+colnames(genus_data) <- gsub("\\.", "", colnames(genus_data))
+missing_samples_genus_otus <- setdiff(sam_data$SampleID, colnames(genus_data[, -1]))
+
+genus_count_table <- otu_table(genus_data |> column_to_rownames("genus"), taxa_are_rows = TRUE)
+mg_g <- phyloseq(genus_count_table, sam_data)
+sort(sample_sums(mg_g))
+
+total_counts <- sample_sums(mg_g) |>
+  enframe() |>
+  dplyr::rename(sample = name, count = value)
+
+min(sample_sums(mg_g))
+
+rar_table_g <- cached(here::here("cache/rar_table_g.rds"), {
+  data.frame(t(rrarefy.perm(data.frame(t(mg_g@otu_table)),
+                             sample = 98958, n = 100, round.out = T)))
+})
+rar_table_g <- rar_table_g[rowSums(rar_table_g) != 0, ]
+colnames(rar_table_g) <- sub("X", "", colnames(rar_table_g))
+rownames(rar_table_g) <- gsub("\\.", "-", rownames(rar_table_g))
+mg_g_rar <- phyloseq(sample_data(mg_g@sam_data),
+                     otu_table(as.matrix(rar_table_g), taxa_are_rows = T))
+mg_g_rar
+
+# Merge paired samples
+mg_g_sd <- data.frame(sample_data(mg_g)) |>
+  mutate(merging_id = case_when(
+    grepl("3$", SampleID) ~ sub("3$", "1", SampleID),
+    grepl("4$", SampleID) ~ sub("4$", "2", SampleID),
+    TRUE ~ SampleID
+  ))
+sample_data(mg_g) <- sample_data(mg_g_sd)
+mg_g_mer <- merge_samples(mg_g, group = "merging_id", fun = mean)
+cat("Samples after merging:", nsamples(mg_g_mer), "\n")
+
+# Transform to relative abundance and get top 5 genera
+mg_g_mer_RA <- transform_sample_counts(mg_g_mer, function(x) x / sum(x))
+
+top5_genera <- psmelt(mg_g_mer_RA) |>
+  group_by(OTU) |>
+  summarise(mean_RA = mean(Abundance, na.rm = TRUE) * 100, .groups = "drop") |>
+  arrange(desc(mean_RA)) |>
+  slice_head(n = 5)
+top5_genera
+top5_genera |> dplyr::select(mean_RA) |> deframe() |> sum()
+
+mg_g_rar_RA_curto <- psmelt(mg_g_mer_RA) |>
+  filter(OTU == "Curtobacterium") |>
+  dplyr::select(-SampleID) |>
+  rename(SampleID = Sample) |>
+  (\(df) {
+    na_cols <- names(df)[sapply(df, anyNA)]
+    left_join(df,
+              metadata |> dplyr::select(SampleID, any_of(na_cols)),
+              by = "SampleID", suffix = c("_drop", "")) |>
+      dplyr::select(-ends_with("_drop"))
+  })()
+
+mg_g_rar_RA_curto |>
+  group_by(reserve_code) |>
+  summarise(mean_RA = mean(Abundance, na.rm = TRUE) * 100, .groups = "drop") |>
+  arrange(desc(mean_RA)) |>
+  print(n = 24)
+
+metadata$sampleID <- row.names(metadata)
+count_summary <- mg_g_rar_RA_curto
+
+# Relative abundance plots
+curto_total.ra_plot <- ggplot(count_summary, aes(reorder(sampleID, Abundance, decreasing = T), Abundance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Relative abundances of Curtobacterium sequences in each metagenomic library",
+       x = "Sample", y = "Curto rel. abundance") +
+  apatheme +
+  theme(text = element_text(size = 20),
+        axis.text.x = element_text(size = 10, angle = 90, hjust = 1),
+        axis.text.y = element_text(size = 12))
+
+curto_RA_boxplot <- ggplot(data = count_summary, aes(x = Litter_type, y = Abundance, fill = Litter_type)) +
+  geom_boxplot() +
+  geom_point(position = position_jitterdodge()) +
+  facet_grid(~Ecosystem, scale = "free", space = "free_x") +
+  scale_fill_manual(values = colors, name = "Litter type") +
+  xlab("Litter type") + ylab("Relative abundance") +
+  ggtitle("Relative abundance of Curtobacterium in Leaf litter") +
+  apatheme +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+print(curto_RA_boxplot)
+
+# ANOVA
+RA_anova <- car::Anova(aov(Abundance ~ Plant_type, data = count_summary), type = "III")
+RA_anova
+tukey_plantTypeVSlitter <- TukeyHSD(aov(Abundance ~ Plant_type, data = count_summary))
+cld <- multcompView::multcompLetters(tukey_plantTypeVSlitter$Plant_type[, "p adj"])
+RA_anova_2 <- car::Anova(aov(Abundance ~ Ecosystem * Litter_type, data = count_summary), type = "III")
+RA_anova_2
+
+curto_RA_EcosysPT <- ggplot(data = count_summary, aes(x = Plant_type, y = Abundance, fill = Plant_type)) +
+  geom_boxplot() +
+  geom_point(position = position_jitterdodge()) +
+  scale_fill_manual(values = colors, name = "Litter type") +
+  scale_y_continuous(labels = scales::percent_format(scale = 100)) +
+  xlab("Litter type") + ylab("Relative abundance") +
+  theme_minimal() +
+  theme(text = element_text(size = 12),
+        axis.title.y = element_text(margin = ggplot2::margin(t = -50)),
+        panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+print(curto_RA_EcosysPT)
+
+ggarrange(litter_chem_comp_barplot, curto_RA_EcosysPT, nrow = 1, widths = c(0.5, 1), labels = "AUTO")
+ggsave(filename = here::here("plots/taxa_barplots/RelAb_by_litter_barplot_litterChem.png"),
+       width = 220, height = 120, units = "mm", dpi = 300)
+
+# Curtobacterium RA vs environmental variables
+for (variable in colnames(count_summary)[c(7:26, 37:41)]) {
+  curto_ab_VS_vars_plot <- ggplot(data = count_summary, aes(x = !!sym(variable), y = Abundance)) +
+    geom_smooth(method = "lm") +
+    stat_regline_equation(
+      aes(label = paste(..adj.rr.label.., sep = "~~~~")),
+      position = "jitter", label.y = Inf) +
+    scale_y_continuous(labels = scales::percent_format(scale = 100)) +
+    geom_point(size = 4) +
+    labs(y = "Curtobacterium Relative Abundance") +
+    apatheme + theme(text = element_text(size = 16))
+  print(curto_ab_VS_vars_plot)
+  ggsave(filename = paste(here::here("plots/linear_regression/total_curto_Ab_vs"),
+                          variable, "png", sep = "."),
+         width = 30, height = 20, units = "cm", dpi = 320)
+}
+
+mean(count_summary$Abundance) * 100
+count_summary |> ungroup() |> group_by(reserve_code) |>
+  reframe(meanRA = mean(Abundance, na.rm = T) * 100) |>
+  dplyr::arrange(meanRA) |> print(n = 24)
+
+```
+
+#### Partial Dependence Plots with Total Curto Relative Abundance
+
+```{r PDPs, message=FALSE, warning=FALSE, results='hold', echo=FALSE, include=FALSE}
+# Partial dependence plots with total Curto relative abundance
+set.seed(711)
+
+pcadf_expanded <- pcadf |>
+  dplyr::select(PC1, PC2, SampleID) |>
+  dplyr::mutate(SiteID = substr(SampleID, 1, 2)) |>
+  group_by(SiteID) %>%
+  summarise(SampleID = c(paste0(SiteID, "D1"), paste0(SiteID, "D2"),
+                         paste0(SiteID, "G1"), paste0(SiteID, "G2"))) %>%
+  left_join(pcadf |> dplyr::select(PC1, PC2, SampleID), by = "SampleID") %>%
+  dplyr::mutate(SiteID = substr(SampleID, 1, 2)) |>
+  group_by(SiteID) %>%
+  mutate(
+    PC1 = case_when(
+      is.na(PC1) & grepl("D", SampleID) ~ coalesce(first(PC1[grepl("D1", SampleID)]), first(PC1[grepl("G1", SampleID)])),
+      is.na(PC1) & grepl("G", SampleID) ~ coalesce(first(PC1[grepl("G1", SampleID)]), first(PC1[grepl("D1", SampleID)])),
+      TRUE ~ PC1),
+    PC2 = case_when(
+      is.na(PC2) & grepl("D", SampleID) ~ coalesce(first(PC2[grepl("D1", SampleID)]), first(PC2[grepl("G1", SampleID)])),
+      is.na(PC2) & grepl("G", SampleID) ~ coalesce(first(PC2[grepl("G1", SampleID)]), first(PC2[grepl("D1", SampleID)])),
+      TRUE ~ PC2)
+  ) %>%
+  ungroup() %>%
+  arrange(SiteID, SampleID) %>%
+  distinct() %>%
+  filter(!SampleID %in% c("19D1", "19D2"))
+
+count_summary <- count_summary %>%
+  dplyr::select(-any_of(c("PC1.clim", "PC2.clim", "PC1.litt", "PC2.litt"))) %>%
+  merge(., pcadf_expanded |> dplyr::select(-SiteID), by.x = "SampleID", by.y = "SampleID") %>%
+  dplyr::rename(PC1.clim = PC1, PC2.clim = PC2) %>%
+  merge(., pca_litt_df_md %>% dplyr::select(Row.names, PC1, PC2), by.x = "SampleID", by.y = "Row.names") %>%
+  dplyr::rename(PC1.litt = PC1, PC2.litt = PC2)
+
+clim_vars_PC   <- c("PC1.clim", "PC2.clim")
+litter_vars    <- c("pH", "crude_protein", "cellulose", "hemicellulose", "lignin")
+litter_vars_PC <- c("PC1.litt", "PC2.litt")
+
+colnames(count_summary) <- gsub(" ", ".", colnames(count_summary))
+
+
+# Exploratory PDP (iml / simple RF)
+pdp_temp <- count_summary %>%
+  dplyr::select(-c(SampleID, reserve_code, Litter_type)) %>%
+  dplyr::select(all_of("Abundance"), dplyr::all_of(c(clim_vars_PC, litter_vars))) %>%
+  na.omit() |>
+  dplyr::rename(curto_ra = Abundance)
+
+rf.mod  <- randomForest(curto_ra ~ ., data = pdp_temp)
+glm.mod <- glm(curto_ra ~ ., data = pdp_temp)
+X       <- pdp_temp[!(names(pdp_temp) %in% "curto_ra")]
+predictor_rf  <- Predictor$new(model = rf.mod,  data = X, y = pdp_temp$curto_ra)
+predictor_glm <- Predictor$new(glm.mod, data = X, y = pdp_temp$curto_ra)
+imp_rf        <- iml::FeatureImp$new(predictor_rf,  loss = "rmse", n.repetitions = 100, compare = "difference")
+imp_glm       <- FeatureImp$new(predictor_glm, loss = "rmse", n.repetitions = 100, compare = "difference")
+imp_results_rf  <- imp_rf$results
+imp_results_glm <- imp_glm$results
+effs_rf  <- FeatureEffects$new(predictor_rf,  grid.size = 20, method = "pdp")
+effs_glm <- FeatureEffects$new(predictor_glm, grid.size = 20, method = "pdp")
+effs_results_rf  <- do.call(rbind, effs_rf$results)
+effs_results_glm <- do.call(rbind, effs_glm$results)
+rug <- X
+
+pdp_plot_rf <- effs_results_rf %>%
+  mutate(var_type = case_when(.feature %in% clim_vars_PC ~ "Climate",
+                              .feature %in% litter_vars  ~ "Litter chemistry", TRUE ~ NA),
+         .feature = dplyr::recode(.feature, PC1.clim = "PC1", PC2.clim = "PC2")) |>
+  dplyr::filter(.type == "pdp") %>%
+  mutate(.feature = gsub("_", " ", .feature)) %>%
+  ggplot(aes(x = .borders, y = .value, color = .feature)) +
+  scale_color_manual(values = allvars_pallete) +
+  scale_y_continuous(labels = scales::percent_format(scale = 100)) +
+  geom_rug(data = reshape2::melt(rug) |> dplyr::rename(.feature = variable) |>
+             mutate(.feature = dplyr::recode(.feature, PC1.clim = "PC1", PC2.clim = "PC2"),
+                    .feature = gsub("_", " ", .feature)),
+           aes(x = value), sides = "b", inherit.aes = FALSE) +
+  ggh4x::facet_nested(~ var_type + .feature, scales = "free_x") +
+  labs(x = "Variable value",
+       y = "Predicted relative abundance\n(# Curtobacterium reads/# total prokaryotic reads)") +
+  geom_line(linewidth = 1) +
+  guides(color = "none") +
+  apatheme +
+  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
+        strip.background = element_rect(fill = NA, colour = "black"),
+        strip.text = element_text(size = 10),
+        panel.grid.major.y = element_line(colour = "grey90"),
+        text = element_text(size = 10))
+print(pdp_plot_rf)
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_totalCurtoRA_clim_litt_vars.png"),
+       width = 60, height = 40, units = "cm", dpi = 320)
+
+# Bootstrapped RF analysis with CIs
+curto_ra_res <- cached(here::here("cache/curto_ra_res.rds"), {
+  run_rf_analysis(
+    df           = count_summary,
+    response_var = "Abundance",
+    predictors   = c(clim_vars_PC, litter_vars),
+    ntree        = 1000, cv_folds = 10, nperm_oob = 500,
+    nrep_vi = 500, n_boot = 100, grid.size = 20)
+})
+
+curto_ra_res$summary_table
+
+write.table(curto_ra_res$summary_table,
+            file = here::here("plots/RF_validation_curto_RA.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+plots_rf_ra <- generate_plots(
+  imp_results_rf = curto_ra_res$imp_results_rf,
+  pdp_ci_df      = curto_ra_res$pdp_ci_df,
+  rug            = curto_ra_res$rug,
+  clim_vars_PC, litter_vars, allvars_pallete, apatheme,
+  cv_r2          = curto_ra_res$CV_r2,
+  curto_ra_res$pval_cv,
+  sig_vars       = curto_ra_res$sig_vars_rfp,
+  response_label = "Relative abundance")
+plots_rf_ra
+
+curto_RA_PDP_plot <- ggarrange(plots_rf_ra$pdp_plot_rf, plots_rf_ra$imp_plot_pdp_rf,
+                               labels = "AUTO", ncol = 2, common.legend = F,
+                               widths = c(1.75, 0.65), hjust = -0.2)
+print(curto_RA_PDP_plot)
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_totalCurtoRA_clim_litt_vars_Sig_varsCIs.png"),
+       plot = curto_RA_PDP_plot, width = 250, height = 100, units = "mm",
+       dpi = 300, device = "png", type = "cairo-png")
+```
+
+#### GLM — Relative abundance
+
+```{r glm-ra, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+curto_ra_glm_res <- cached(here::here("cache/curto_ra_glm_res.rds"), {
+  run_glm_analysis(
+    df           = count_summary,
+    response_var = "Abundance",
+    predictors   = c(clim_vars_PC, litter_vars),
+    cv_folds = 10, nrep_vi = 500, n_boot = 100, grid.size = 20)
+})
+
+curto_ra_glm_res$summary_table
+
+write.table(curto_ra_glm_res$summary_table,
+            file = here::here("plots/GLM_validation_curto_RA.csv"),
+            quote = F, row.names = F, col.names = T, sep = ",")
+
+plots_glm_ra <- generate_plots(
+  imp_results_rf = curto_ra_glm_res$imp_results_rf,
+  pdp_ci_df      = curto_ra_glm_res$pdp_ci_df,
+  rug            = curto_ra_glm_res$rug,
+  clim_vars_PC, litter_vars, allvars_pallete, apatheme,
+  cv_r2          = curto_ra_glm_res$CV_r2,
+  curto_ra_glm_res$pval_cv,
+  sig_vars       = curto_ra_glm_res$sig_vars_rfp,
+  response_label = "Relative abundance")
+
+curto_RA_GLM_plot <- ggarrange(plots_glm_ra$pdp_plot_rf, plots_glm_ra$imp_plot_pdp_rf,
+                                labels = "AUTO", ncol = 2, common.legend = F,
+                                widths = c(1.75, 0.65), hjust = -0.2)
+print(curto_RA_GLM_plot)
+
+ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_totalCurtoRA_clim_litt_vars_Sig_varsCIs.png"),
+       plot = curto_RA_GLM_plot, width = 250, height = 100, units = "mm",
+       dpi = 300, device = "png", type = "cairo-png", bg = "white")
+```
+
+#### Rarefaction of Count table
+
+```{r rarefaction-strain, message=FALSE, warning=FALSE, results='hold', echo=FALSE, include=FALSE}
+mg <- prune_samples(sample_sums(mg) != 0, mg)
+
+mgB4rar   <- subset_taxa(mg, genus == "Curtobacterium")
+rar_table <- cached(here::here("cache/rar_table.rds"), {
+  data.frame(t(rrarefy.perm(data.frame(t(mgB4rar@otu_table)),
+                             sample = 1945, n = 100, round.out = T)))
+})
+rar_table <- rar_table[rowSums(rar_table) != 0, ]
+colnames(rar_table) <- sub("X", "", colnames(rar_table))
+rownames(rar_table) <- sub("X", "", rownames(rar_table))
+rownames(rar_table) <- gsub("\\.", "-", rownames(rar_table))
+mg_rar <- phyloseq(sample_data(mg@sam_data),
+                   otu_table(as.matrix(rar_table), taxa_are_rows = T),
+                   tax_table(mg@tax_table))
+saveRDS(mgB4rar, here::here("results/rds/mgB4rar.rds"))
+saveRDS(mg_rar, here::here("results/rds/mg_rar.rds"))
+mg_rar
+```
+
+```{r count-plots, fig.width=30, fig.height=14, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+curto_total.ra_plot
+
+model <- lm(curto_count ~ total_count + Litter_type * Ecosystem,
+            data = count_summary %>% filter(total_count > 1000))
+summary(model)
+```
+
+### Relative abundance plots (taxa barplots)
+
+```{r taxa-barplots, echo=FALSE, fig.height=14, fig.width=30, message=FALSE, warning=FALSE, results='hold'}
+genus_bp_df <- tax_glom(mg, taxrank = "genus") %>%
+  transform_sample_counts(., function(x) {x / sum(x)}) %>%
+  psmelt() %>%
+  arrange(genus)
+
+barplot_genus_g <- ggplot(genus_bp_df %>% filter(Litter_type == "G"),
+                          aes(x = Sample, y = Abundance, fill = genus)) +
+  geom_bar(stat = "identity") + scale_fill_manual(values = colors) + theme_bw() +
+  facet_grid(~ reserve_code, scale = "free", space = "free_x") +
+  xlab("Litter Samples") + scale_y_continuous(labels = scales::percent) + ylab("Abundance (%)") +
+  scale_x_discrete(breaks = NULL) + labs(fill = "Genus") +
+  ggtitle("Abundant genera in Grass Leaf litter") +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x = element_blank())
+
+barplot_genus_d <- ggplot(genus_bp_df %>% filter(Litter_type == "DV"),
+                          aes(x = Sample, y = Abundance, fill = genus)) +
+  geom_bar(stat = "identity") + scale_fill_manual(values = colors) + theme_bw() +
+  facet_grid(~ reserve_code, scale = "free", space = "free_x") +
+  xlab("Litter Samples") + scale_y_continuous(labels = scales::percent) + ylab("Abundance (%)") +
+  scale_x_discrete(breaks = NULL) + labs(fill = "Genus") +
+  ggtitle("Abundant genera in Dominant Vegetation litter") +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x = element_blank())
+
+ggarrange(barplot_genus_g, barplot_genus_d, ncol = 1, labels = "AUTO", common.legend = T, legend = "bottom")
+ggsave(here::here("plots/taxa_barplots/taxabp_genus.png"),
+       width = 45, height = 40, units = "cm", dpi = 320)
+
+clades_bp_df <- tax_glom(mg, taxrank = "clade") %>%
+  transform_sample_counts(., function(x) {x / sum(x)}) %>%
+  psmelt() %>%
+  mutate(clade = factor(clade, levels = c("I", "II", "III", "IV", "V", "UND"))) %>%
+  arrange(clade)
+
+barplot_clades_g <- ggplot(clades_bp_df %>% filter(Litter_type == "G"),
+                           aes(x = Sample, y = Abundance, fill = clade)) +
+  geom_bar(stat = "identity") + scale_fill_manual(values = clade_colors) + theme_bw() +
+  facet_grid(~ reserve_code, scale = "free", space = "free_x") + xlab("Litter Samples") +
+  scale_y_continuous(labels = scales::percent) + ylab("Abundance (%)") +
+  scale_x_discrete(breaks = NULL) + labs(fill = "Clade") +
+  ggtitle("Curtobacterium clades in Grass litter") +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x = element_blank())
+
+barplot_clades_d <- ggplot(clades_bp_df %>% filter(Litter_type == "DV"),
+                           aes(x = Sample, y = Abundance, fill = clade)) +
+  geom_bar(stat = "identity") + scale_fill_manual(values = clade_colors) + theme_bw() +
+  facet_grid(~ reserve_code, scale = "free", space = "free_x") + xlab("Litter Samples") +
+  scale_y_continuous(labels = scales::percent) + ylab("Abundance (%)") +
+  scale_x_discrete(breaks = NULL) + labs(fill = "Clade") +
+  ggtitle("Curtobacterium clades in Dominant Vegetation litter") +
+  theme(text = element_text(size = 17), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x = element_blank())
+
+ggarrange(barplot_clades_g, barplot_clades_d, ncol = 1, labels = "AUTO", common.legend = T, legend = "bottom")
+ggsave(here::here("plots/taxa_barplots/taxabp_clades.png"),
+       width = 45, height = 40, units = "cm", dpi = 320)
+
+clades_bp_df |> group_by(clade) |> summarise(meanRA = mean(Abundance) * 100)
+
+#### get top 25 strains ####
+top25names <- names(sort(taxa_sums(mg_rar), decreasing = T)[1:100])
+top25 <- as.data.frame(tax) |>
+  dplyr::filter(row.names(tax) %in% top25names) |>
+  rownames_to_column("rowname") %>%
+  mutate(rowname = factor(rowname, levels = top25names)) %>%
+  arrange(rowname) %>%
+  column_to_rownames("rowname") |>
+  dplyr::mutate(total_abundance = sort(taxa_sums(mg_rar), decreasing = T)[1:100])
+
+base::table(top25$clade)
+base::table(top25$subclade)
+
+subclade_colors_bp <- c(
+  "Clade I" = "transparent",   "IA" = subclade_colros[["IA"]],   "IB" = subclade_colros[["IB"]],   "IC" = subclade_colros[["IC"]],
+  "Clade II" = "transparent",  "IIA" = subclade_colros[["IIA"]], "IIB" = subclade_colros[["IIB"]], "IIC" = subclade_colros[["IIC"]],
+  "IID" = subclade_colros[["IID"]], "IIE" = subclade_colros[["IIE"]], "IIF" = subclade_colros[["IIF"]], "IIG" = subclade_colros[["IIG"]],
+  "IIH" = subclade_colros[["IIH"]], "IIJ" = subclade_colros[["IIJ"]], "IIK" = subclade_colros[["IIK"]],
+  "Clade III" = "transparent", "IIIA" = subclade_colros[["IIIA"]], "IIIB" = subclade_colros[["IIIB"]],
+  "IIIC" = subclade_colros[["IIIC"]], "IIID" = subclade_colros[["IIID"]], "IIIE" = subclade_colros[["IIIE"]], "IIIF" = subclade_colros[["IIIF"]],
+  "Clade IV" = "transparent",  "IVA" = subclade_colros[["IVA"]], "IVB" = subclade_colros[["IVB"]],
+  "IVC" = subclade_colros[["IVC"]], "IVD" = subclade_colros[["IVD"]], "IVE" = subclade_colros[["IVE"]],
+  "Clade V" = "transparent",   "VA" = subclade_colros[["VA"]]
+)
+
+subclades_one_sample_per_LitterTrype_df <- tax_glom(mg_rar, taxrank = "subclade") %>%
+  merge_samples("reserve_litter")
+
+otu_matrix   <- as.matrix(t(otu_table(subclades_one_sample_per_LitterTrype_df)))
+otu_averaged <- apply(otu_matrix, 2, function(x) round(x / 2))
+otu_averaged <- otu_averaged[, colnames(otu_matrix)]
+otu_table(subclades_one_sample_per_LitterTrype_df) <- otu_table(otu_averaged, taxa_are_rows = TRUE)
+
+oneSample_LitterType_sam_data <- data.frame(subclades_one_sample_per_LitterTrype_df@sam_data) |>
+  dplyr::select(-c(reserve_litter, reserve_code, Litter_type)) |>
+  rownames_to_column("reserve_litter") |>
+  left_join(metadata |>
+              mutate(reserve_litter = paste(reserve_code, Litter_type, sep = "-")) |>
+              dplyr::select(reserve_litter, reserve_code, Litter_type) |>
+              distinct(reserve_litter, .keep_all = T), by = "reserve_litter") |>
+  column_to_rownames("reserve_litter")
+sample_data(subclades_one_sample_per_LitterTrype_df) <- oneSample_LitterType_sam_data
+
+subclades_bp_df <- subclades_one_sample_per_LitterTrype_df <- 
+  transform_sample_counts(subclades_one_sample_per_LitterTrype_df, function(x) {x / sum(x)}) %>%
+  psmelt() %>%
+  mutate(subclade = factor(subclade, levels = subclds)) %>%
+  arrange(subclade)
+
+correct_order <- c(
+  "Clade I", "IA", "IB", "IC",
+  "Clade II", "IIA", "IIB", "IIC", "IID", "IIE", "IIF", "IIG", "IIH", "IIJ", "IIK",
+  "Clade III", "IIIA", "IIIB", "IIIC", "IIID", "IIIE", "IIIF",
+  "Clade IV", "IVA", "IVB", "IVC", "IVD", "IVE",
+  "Clade V", "VA"
+)
+
+dummy_clades <- data.frame(
+  Sample      = c(rep("SCPS-G", 5), rep("MER-D", 5)),
+  reserve_code = c(rep("SCPS", 5), rep("MER", 5)),
+  Abundance   = 0.0000000001,
+  subclade    = factor(rep(c("Clade I", "Clade II", "Clade III", "Clade IV", "Clade V"), 2),
+                       levels = names(subclade_colors_bp)),
+  Litter_type = c(rep("G", 5), rep("DV", 5))
+)
+
+subclades_one_sample_per_LitterTrype_df <- bind_rows(subclades_one_sample_per_LitterTrype_df, dummy_clades)
+
+subcladeIIIA_sorted_df <- subclades_one_sample_per_LitterTrype_df |>
+  dplyr::filter(subclade == "IIIA" & Litter_type == "G") |>
+  arrange(Abundance) |>
+  mutate(reserve_code = fct_reorder(reserve_code, Abundance))
+
+subclades_one_sample_per_LitterTrype_df$subclade <-
+  factor(subclades_one_sample_per_LitterTrype_df$subclade, levels = correct_order)
+
+barplot_subclades_g <- ggplot(
+  subclades_one_sample_per_LitterTrype_df %>%
+    filter(Litter_type == "G") |>
+    mutate(reserve_code = factor(reserve_code, levels = levels(subcladeIIIA_sorted_df$reserve_code))),
+  aes(x = Sample, y = Abundance, fill = subclade)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = subclade_colors_bp, labels = correct_order) +
+  theme_bw() + facet_grid(~ reserve_code, scale = "free", space = "free_x") +
+  xlab("") + scale_y_continuous(labels = scales::percent) + ylab("Abundance (%)") +
+  scale_x_discrete(breaks = NULL) +
+  guides(fill = guide_legend(ncol = 1, override.aes = list(size = 4))) +
+  labs(fill = "Subclade") + ggtitle("Grass litter") +
+  theme(text = element_text(size = 10), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x = element_blank(), legend.position = "right",
+        legend.key.size = unit(0.4, "cm"), legend.text = element_text(size = 10),
+        legend.title = element_text(size = 12), legend.spacing.y = unit(0.1, "cm"),
+        legend.margin = ggplot2::margin(2, 2, 2, 2))
+print(barplot_subclades_g)
+
+barplot_subclades_d <- ggplot(
+  subclades_one_sample_per_LitterTrype_df %>%
+    filter(Litter_type == "DV") |>
+    mutate(reserve_code = factor(reserve_code, levels = levels(subcladeIIIA_sorted_df$reserve_code))),
+  aes(x = Sample, y = Abundance, fill = subclade)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = subclade_colors_bp) +
+  theme_bw() + facet_grid(~ reserve_code, scale = "free", space = "free_x") +
+  xlab("Litter Samples") + scale_y_continuous(labels = scales::percent) + ylab("Abundance (%)") +
+  scale_x_discrete(breaks = NULL) + labs(fill = "Subclade") +
+  guides(fill = guide_legend(ncol = 1, override.aes = list(size = 4))) +
+  ggtitle("Dominant Vegetation litter") +
+  theme(text = element_text(size = 10), panel.spacing = unit(0, "line"),
+        panel.border = element_rect(color = "gray", fill = NA, linewidth = 0.1),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.title.x = element_blank(), axis.text.x = element_blank())
+
+ggarrange(barplot_subclades_g, barplot_subclades_d, ncol = 1, labels = "AUTO",
+          common.legend = T, legend = "right")
+ggsave(here::here("plots/taxa_barplots/taxabp_subclades.png"),
+       width = 260, height = 130, units = "mm", dpi = 300)
+```
+
+**For the next plots below, the count table was rarefied to 1900 sequences per sample.**
+
+```{r save-rds, include=FALSE}
+saveRDS(count_summary,      here::here("results/rds/count_summary.rds"))
+saveRDS(clim_vars_PC,       here::here("results/rds/clim_vars_PC.rds"))
+saveRDS(litter_vars,        here::here("results/rds/litter_vars.rds"))
+saveRDS(pcadf_expanded,     here::here("results/rds/pcadf_expanded.rds"))
+saveRDS(subclades_bp_df,    here::here("results/rds/subclades_bp_df.rds"))
+saveRDS(subclade_colors_bp, here::here("results/rds/subclade_colors_bp.rds"))
+saveRDS(correct_order,      here::here("results/rds/correct_order.rds"))
+saveRDS(mg_un_curto,        here::here("results/rds/mg_un_curto.rds"))
+```

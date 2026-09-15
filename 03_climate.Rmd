@@ -1,0 +1,279 @@
+---
+title: "03 — Climate"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(vegan)
+library(caret)
+library(corrplot)
+library(dismo)
+library(ggpubr)
+library(ggrepel)
+library(sf)
+library(rnaturalearth)
+library(ggnewscale)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+metadata <- readRDS(here::here("results/rds/metadata_litter.rds"))
+pca_litt_df_md <- readRDS(here::here("results/rds/pca_litt_df_md.rds"))
+PCAloads_litt_md <- readRDS(here::here("results/rds/PCAloads_litt_md.rds"))
+reserve_codenames <- readRDS(here::here("results/rds/reserve_codenames.rds"))
+```
+
+##### Site map
+
+Map of the 24 UC Natural Reserve System sites, coloured by ecosystem type. Note that in the metadata `plot_cordsX` holds latitude and `plot_cordsY` holds longitude.
+
+```{r site-map, message=FALSE, warning=FALSE, fig.width=9, fig.height=7, results='hold', echo=FALSE}
+# California state boundary (1:50m Natural Earth), cached to avoid re-downloading
+california <- cached(here::here("cache/california_sf.rds"), {
+  rnaturalearth::ne_download(scale = 50, type = "admin_1_states_provinces_lakes",
+                             category = "cultural", returnclass = "sf") |>
+    dplyr::filter(name == "California")
+})
+
+# One point per reserve (plot_cordsX = latitude, plot_cordsY = longitude);
+# fix the "Connifer Forest" spelling so it matches ecosystem_colors, and attach short codes
+sites_sf <- metadata |>
+  dplyr::distinct(Reserve, .keep_all = TRUE) |>
+  dplyr::select(Reserve, Ecosystem, lat = plot_cordsX, lon = plot_cordsY) |>
+  dplyr::mutate(Ecosystem = dplyr::recode(Ecosystem, "Connifer Forest" = "Conifer Forest")) |>
+  dplyr::left_join(reserve_codenames |> dplyr::select(ReserveName, CodeName),
+                   by = c("Reserve" = "ReserveName")) |>
+  dplyr::arrange(CodeName) |>
+  dplyr::mutate(reserve_key = factor(paste0(CodeName, " = ", Reserve),
+                                     levels = paste0(CodeName, " = ", Reserve))) |>
+  sf::st_as_sf(coords = c("lon", "lat"), crs = 4326)
+
+# colours for the reserve-key legend = each reserve's ecosystem colour
+reserve_key_cols <- setNames(ecosystem_colors[sites_sf$Ecosystem], sites_sf$reserve_key)
+
+site_map <- ggplot() +
+  geom_sf(data = california, fill = "grey97", colour = "grey55", linewidth = 0.3) +
+  geom_sf(data = sites_sf, aes(colour = Ecosystem), size = 3, alpha = 0.9) +
+  scale_colour_manual(values = ecosystem_colors, name = "Ecosystem") +
+  # short codes on the map
+  geom_text_repel(data = sites_sf, aes(geometry = geometry, label = CodeName),
+                  stat = "sf_coordinates", size = 2.6, fontface = "bold",
+                  max.overlaps = Inf, min.segment.length = 0,
+                  segment.size = 0.2, box.padding = 0.3) +
+  coord_sf(expand = FALSE) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid = element_line(colour = "grey92"),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.35, "cm"),
+        legend.position = "inside",
+        legend.position.inside = c(0.95, 0.85))
+site_map
+
+ggsave(here::here("plots/site_map_california.png"), site_map,
+       width = 7, height = 7, dpi = 300, bg = "white")
+```
+
+##### Climate data analysis
+
+I downloaded the monthly normals (averages over 30 years 1991-2020) of max and min temperature and precipitation data from PRISM (U. of Oregon). I obtained values for each of the coordinates for the Grass and Dominant Vegetation plots.
+
+```{r climate-data, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+prism_data <- read.csv(here::here("PRISM_ppt_tmin_tmean_tmax_30yr_normal_800m_monthly_normals.csv"),
+                       header = T)
+prism_data$Name <- as.factor(prism_data$Name)
+prism_data <- prism_data %>% filter(!is.na(Longitude))
+
+bioclim_vars <- data.frame()
+for (i in 1:length(unique(prism_data$Name))) {
+  filter_temp  <- prism_data %>% filter(Name == unique(prism_data$Name)[i] & Date != "Annual")
+  biovars_temp <- biovars(filter_temp$ppt..mm., filter_temp$tmin..degrees.C., filter_temp$tmax..degrees.C.)
+  tmp          <- data.frame(reserve_litter = unique(prism_data$Name)[i], biovars_temp)
+  bioclim_vars <- rbind(bioclim_vars, tmp)
+  rm(tmp)
+}
+
+metadata <- metadata %>%
+  mutate(reserve_litter = paste(reserve_code, Litter_type, sep = "-")) %>%
+  merge(., bioclim_vars, by = "reserve_litter")
+
+bioclim_vars_md <- metadata |> distinct(reserve_litter, .keep_all = T)
+
+bioclim_names <- read.table(here::here("data/bioclim_names.txt"), sep = "\t")
+
+bioclim_labels <- c(
+  bio1 = "MAT", bio2 = "T_Diurn", bio3 = "T_Iso", bio4 = "T_Seas",
+  bio5 = "T_MaxWarmMo", bio6 = "T_MinColdMo", bio7 = "T_Range",
+  bio8 = "T_WetQ", bio9 = "T_DryQ", bio10 = "T_WarmQ", bio11 = "T_ColdQ",
+  bio12 = "MAP", bio13 = "P_WetMo", bio14 = "P_DryMo", bio15 = "P_Seas",
+  bio16 = "P_WetQ", bio17 = "P_DryQ", bio18 = "P_WarmQ", bio19 = "P_ColdQ"
+)
+
+colnames(bioclim_vars_md)[22:40] <- bioclim_labels
+
+# Find correlated variables
+nzv <- nearZeroVar(bioclim_vars_md[, c(22:40)])
+nzv
+cor.matrix     <- cor(bioclim_vars_md[, c(22:40)], use = "na.or.complete")
+corrplot(cor.matrix, order = "hclust", method = "color", type = "lower",
+         tl.cex = 0.7, tl.col = rgb(0, 0, 0), addCoef.col = T)
+highlyCorrelated <- findCorrelation(cor.matrix, cutoff = 0.85, names = T, exact = T, verbose = T)
+print(highlyCorrelated)
+highlyCorrelated <- c(highlyCorrelated[highlyCorrelated != "MAP"], "P_ColdQ")
+
+# PCA on all 19 bioclimatic variables
+rownames(bioclim_vars_md) <- bioclim_vars_md$reserve_litter
+pca_bcv   <- prcomp(bioclim_vars_md[, c(22:40)], center = T, scale. = T)
+pcadf_bcv <- data.frame(pca_bcv$x)
+bioclim_vars_md$PC1 <- pcadf_bcv$PC1
+bioclim_vars_md$PC2 <- pcadf_bcv$PC2
+PCAloads_bcv <- data.frame(Variables = rownames(pca_bcv$rotation), pca_bcv$rotation)
+summary(pca_bcv)
+
+pca_sq_loadings_bcv   <- pca_bcv$rotation^2
+pca_contributions_bcv <- sweep(pca_sq_loadings_bcv, 2, colSums(pca_sq_loadings_bcv), FUN = "/") * 100
+print(pca_contributions_bcv)
+
+pca_plot_bcv <- ggplot(bioclim_vars_md, aes(PC1, PC2)) +
+  geom_point(data = bioclim_vars_md, aes(color = Ecosystem, shape = Litter_type), size = 4, alpha = 0.75) +
+  geom_text(data = bioclim_vars_md, aes(x = PC1, y = PC2 - 0.35, label = reserve_litter), size = 4.75) +
+  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
+  geom_segment(data = PCAloads_bcv[-which(PCAloads_bcv$Variables %in% highlyCorrelated), ],
+               aes(x = 0, xend = PC1 * 10, y = 0, yend = PC2 * 10),
+               colour = "grey", inherit.aes = FALSE) +
+  geom_label(data = PCAloads_bcv[-which(PCAloads_bcv$Variables %in% highlyCorrelated), ],
+             aes(x = PC1 * 10.7, y = PC2 * 10.7, label = Variables),
+             size = 6, colour = "darkblue",
+             label.padding = unit(0.2, "lines"), label.size = 0.25) +
+  xlab("PC1 (40.54%)") + ylab("PC2 (33.32%)") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        text = element_text(size = 22), legend.position = "bottom") +
+  apatheme
+pca_plot_bcv
+
+pca_contributions_bcv <- as.data.frame(pca_contributions_bcv) |>
+  rownames_to_column(var = "Variable") |>
+  pivot_longer(cols = c(2:10), names_to = "PC", values_to = "Percent") |>
+  mutate(Variable = factor(Variable, levels = colnames(bioclim_vars_md[22:40])))
+
+pca_clim_contributions_plot_bcv <- pca_contributions_bcv |>
+  filter(PC %in% c("PC1", "PC2")) |>
+  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
+  geom_col() +
+  scale_fill_manual(values = clim_pallete) +
+  labs(y = "% of variance contribution") +
+  apatheme + theme(axis.title.x = element_blank())
+pca_clim_contributions_plot_bcv
+
+ggarrange(pca_plot_bcv, pca_clim_contributions_plot_bcv, nrow = 1, widths = c(1, 0.5))
+ggsave(here::here("plots/PCAs/clim_pca_ecosystem_bcv.png"),
+       width = 220, height = 110, units = "mm", dpi = 300, bg = "white")
+```
+
+###### Climate by plot
+
+```{r climate-by-plot, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=30, fig.height=25}
+bioclim_md <- setNames(metadata[22:40], bioclim_labels)
+metadata   <- cbind(metadata[, -c(22:40)], bioclim_md)
+rownames(metadata) <- metadata$SampleID
+
+pca <- prcomp(metadata[, c(22:40)] |> distinct(.keep_all = T), center = T, scale. = T)
+pcadf <- data.frame(pca$x) |>
+  dplyr::select(PC1, PC2) %>%
+  merge(., metadata, by = "row.names")
+
+climate_PERMANOVA <- adonis2(
+  dist(scale(metadata[, c(22:40)] |> distinct(.keep_all = T))) ~ Ecosystem,
+  data = metadata[, c(4, 22:40)] |> distinct(.keep_all = T) |> dplyr::select(Ecosystem),
+  permutations = 999)
+climate_PERMANOVA
+
+PCAloads    <- data.frame(Variables = rownames(pca$rotation), pca$rotation)
+summary(pca)
+
+pca_sq_loadings  <- pca$rotation^2
+pca_contributions <- sweep(pca_sq_loadings, 2, colSums(pca_sq_loadings), FUN = "/") * 100
+print(pca_contributions)
+
+pca_plot <- ggplot(pcadf, aes(PC1, PC2)) +
+  geom_point(data = pcadf, aes(color = Ecosystem), size = 4, alpha = 0.75) +
+  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
+  geom_segment(data = PCAloads,
+               aes(x = 0, xend = PC1 * 10, y = 0, yend = PC2 * 10),
+               colour = "grey", inherit.aes = FALSE) +
+  ggrepel::geom_text_repel(data = PCAloads,
+                            aes(x = PC1 * 10.7, y = PC2 * 10.7,
+                                label = gsub("_", " ", Variables)),
+                            size = 4,
+                            colour = c(rep("#990000", 11), rep("darkblue", 8)),
+                            alpha = 0.95, fontface = "bold") +
+  xlab("PC1 (44.55%)") + ylab("PC2 (31.42%)") +
+  guides(color = guide_legend(title.position = "top"), shape = "none") +
+  apatheme +
+  theme(legend.position = c(0.9, 0.85),
+        legend.background = element_rect(fill = alpha("white", 0.6)),
+        legend.key.size = unit(0.3, "cm"), legend.spacing.y = unit(0.15, "cm"),
+        legend.margin = ggplot2::margin(2, 2, 2, 2),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size =11))
+pca_plot
+
+pca_contributions <- as.data.frame(pca_contributions) |>
+  rownames_to_column(var = "Variable") |>
+  pivot_longer(cols = c(2:20), names_to = "PC", values_to = "Percent") |>
+  mutate(Variable = factor(Variable, levels = colnames(metadata[22:40])))
+
+pca_contributions_plot <- pca_contributions |>
+  filter(PC %in% c("PC1", "PC2")) |>
+  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
+  geom_col() +
+  scale_fill_manual(values = clim_pallete, labels = sub("_", " ", unique(pca_contributions$Variable))) +
+  labs(y = "% of variance contribution") +
+  apatheme + theme(axis.title.x = element_blank())
+pca_contributions_plot
+
+clim_plot_final <- ggarrange(pca_plot, pca_contributions_plot,
+                             nrow = 1, widths = c(1, 0.5),
+                             labels = c("1A.1", "1A.2"), hjust = 0, vjust = 1)
+clim_plot_final
+
+ggsave(here::here("plots/PCAs/clim_pca_ecosystem.png"),
+       width = 300, height = 150, units = "mm", dpi = 300, bg = "white")
+```
+
+###### Printing PCA plots
+
+```{r print-pca-plots}
+ggarrange(pca_plot, pca_plot_litt_md, ncol = 2, common.legend = F, labels = "AUTO")
+ggsave(here::here("plots/PCAs/clim&litter_PCA.png"),
+       width = 280, height = 140, units = "mm", dpi = 300, bg = "white")
+
+ggarrange(pca_contributions_plot, pca_litt_contributions_plot_md,
+          ncol = 2, common.legend = F, labels = "AUTO")
+ggsave(here::here("plots/PCAs/clim&litter_PCA_contributions.png"),
+       width = 240, height = 130, units = "mm", dpi = 300, bg = "white")
+```
+
+```{r save-rds, include=FALSE}
+saveRDS(metadata, here::here("results/rds/metadata_climate.rds"))
+saveRDS(pcadf, here::here("results/rds/pcadf_clim.rds"))
+saveRDS(PCAloads, here::here("results/rds/PCAloads_clim.rds"))
+saveRDS(highlyCorrelated, here::here("results/rds/highlyCorrelated.rds"))
+saveRDS(bioclim_labels, here::here("results/rds/bioclim_labels.rds"))
+```

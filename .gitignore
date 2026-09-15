@@ -1,0 +1,86 @@
+# ── R ─────────────────────────────────────────────────────────────────────────
+*.rds
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# ── Cache / intermediate objects ──────────────────────────────────────────────
+cache/
+results/rds/
+diversity_analysis_cache/
+diversity_analysis_files/
+08_dbrda_files/
+
+# ── Generated plot outputs (recreated by running the pipeline) ─────────────────
+plots/
+plots_glm_pdp/
+
+# ── Generated HTML outputs ────────────────────────────────────────────────────
+*.html
+
+# ── Large raw files (too large for GitHub; obtain separately) ─────────────────
+total_coregenes.fna
+
+# ── Intermediate analysis CSVs (pipeline outputs, not raw inputs) ─────────────
+avg_bray_matrix*.csv
+bray_matrix.csv
+bray_metadata.csv
+dbRDA_metadata*.csv
+dbRDA_metadata_reduced.csv
+RF_validation_summaries.csv
+subclade_Bray_metadata4primer.csv
+subclade_Braytmat.csv
+tables/
+
+# ── PERMANOVA / DistLM outputs (keep only *VarEstimates files used by scripts) -
+PERMANOVA_litter_chem.txt
+PERMANOVA_litter_chem.xlsx
+PERMANOVA_subclades_PlantTypeByReserve.txt
+PERMANOVA_subclades_PlantTypeByReserve.xlsx
+PERMANOVA_subclades_PlantTypeByReserve_varExp.xlsx
+DistLM_AIC_Best.txt
+DistLM_BIC_Best.txt
+DistLM_Subclades_AIC_Best.txt
+DistLM_clades_AIC_Best.txt
+DistLM_marginal_tests.xlsx
+
+# ── Sequencing / lab process files (not part of R pipeline) ───────────────────
+process_executables/
+filtered_seqs_counts.txt
+seqIDs_bc.txt
+all_sequencied._samples.txt
+samples4resequencing.txt
+samples4resequencing.xlsx
+
+# ── Other analysis / admin files ──────────────────────────────────────────────
+child/
+curtobacterium-biogeography/
+diversity_analysis_ORIGINAL_BACKUP.Rmd
+diversity_analysis.Rmd
+curto_tax_table.txt
+soil_samples_data.xlsx
+sites4RTs.txt
+sites4RTs.xlsm
+sample_metadata.txt
+total_prok_counts.txt
+sites_coords.csv
+results/metadata_summary.xlsx
+results/synth_fig/
+
+# ── Scripts beyond scope of 01–10 pipeline ────────────────────────────────────
+11_traits.Rmd
+12_gdm.Rmd
+13_reserves_rts.Rmd
+
+# ── Office files ──────────────────────────────────────────────────────────────
+*.pptx
+*.xlsm
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── Microsoft Office temp files ───────────────────────────────────────────────
+~$*

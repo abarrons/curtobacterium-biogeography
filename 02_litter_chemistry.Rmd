@@ -1,0 +1,280 @@
+---
+title: "02 — Litter Chemistry"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(vegan)
+library(GGally)
+library(ggpubr)
+library(ggrepel)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+metadata <- readRDS(here::here("results/rds/metadata_raw.rds"))
+clade_colors <- readRDS(here::here("results/rds/clade_colors.rds"))
+```
+
+##### Litter data analysis
+
+```{r litter-chem, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+litter_chem <- read.table(here::here("litter_chem/litter_chem.txt"),
+                          header = T, sep = "\t", comment.char = "")
+
+litter_chem <- litter_chem |>
+  dplyr::select(-c(1:4, 6:10)) |>
+  mutate(sampleID = gsub("^#\\d+\\s+", "", desc_1)) |>
+  dplyr::select(-desc_1) |>
+  dplyr::select(sampleID, everything()) |>
+  filter(sampleID != "SKIP")
+
+litter_chem <- litter_chem |>
+  mutate(
+    new_sampleID = case_when(
+      grepl("1$", sampleID) ~ sub("1$", "3", sampleID),
+      grepl("2$", sampleID) ~ sub("2$", "4", sampleID),
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(new_sampleID)) |>
+  bind_rows(
+    litter_chem |>
+      mutate(
+        sampleID = case_when(
+          grepl("1$", sampleID) ~ sub("1$", "3", sampleID),
+          grepl("2$", sampleID) ~ sub("2$", "4", sampleID),
+          TRUE ~ sampleID
+        )
+      )
+  ) |>
+  arrange(sampleID) %>%
+  dplyr::select(sampleID, ADF, NDF, CP, Lignin, NFC, NSC) %>%
+  mutate(
+    cellulose              = ADF - Lignin,
+    hemicellulose          = NDF - ADF,
+    hemicellulose          = pmax(hemicellulose, 0),
+    Structural_Carbohydrates = NFC - NSC
+  ) %>%
+  filter(!sampleID %in% c("0.1", "0.3", "#97")) %>%
+  dplyr::select(sampleID, CP, cellulose, hemicellulose, Structural_Carbohydrates, Lignin) |>
+  dplyr::rename(lignin = Lignin, crude_protein = CP)
+
+# Merge litter chemistry with metadata
+metadata <- merge(metadata, litter_chem, by.x = "SampleID", by.y = "sampleID", all.x = T)
+metadata <- column_to_rownames(metadata, var = "SampleID")
+
+# PCA on all samples
+pca_litt <- prcomp(~ pH + crude_protein + cellulose + hemicellulose + lignin,
+                   data = metadata[, c(11, 15:19)], center = T, scale. = T, na.action = na.exclude)
+summary(pca_litt)
+
+pca_litt_sq_loadings   <- pca_litt$rotation^2
+pca_litt_contributions <- sweep(pca_litt_sq_loadings, 2, colSums(pca_litt_sq_loadings), FUN = "/") * 100
+print(pca_litt_contributions)
+
+pca_litt_contributions <- as.data.frame(pca_litt_contributions) |>
+  rownames_to_column(var = "Variable") |>
+  pivot_longer(cols = c(2:6), names_to = "PC", values_to = "Percent")
+
+pca_litt_contributions_plot <- pca_litt_contributions |>
+  filter(PC %in% c("PC1", "PC2")) |>
+  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
+  geom_col() +
+  scale_fill_manual(values = c("#8B4513", "#D2691E", "#F4A460", "#FFD700", "black")) +
+  labs(y = "% of variance contribution") +
+  apatheme +
+  theme(axis.title.x = element_blank())
+
+pca_litt_contributions_plot
+
+pca_litt_df      <- data.frame(pca_litt$x)
+pca_litt_df      <- merge(pca_litt_df, metadata, by = "row.names", all.x = T)
+PCAloads_litt    <- data.frame(Variables = rownames(pca_litt$rotation), pca_litt$rotation)
+
+pca_plot_litt <- ggplot(pca_litt_df, aes(PC1, PC2)) +
+  geom_point(data = pca_litt_df, aes(color = Ecosystem, shape = Plant_type), size = 5, alpha = 0.75) +
+  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
+  geom_segment(data = PCAloads_litt,
+               aes(x = 0, xend = PC1 * 1, y = 0, yend = PC2 * 1),
+               arrow = arrow(length = unit(0.3, "cm")), colour = "grey", inherit.aes = FALSE) +
+  ggrepel::geom_label_repel(data = PCAloads_litt,
+                             aes(x = PC1 * 1.07, y = PC2 * 1.07, label = Variables),
+                             size = 6, colour = "darkblue",
+                             label.padding = unit(0.2, "lines"), label.size = 0.25) +
+  xlab("PC1 (53.47%)") + ylab("PC2 (18.10%)") +
+  guides(color = guide_legend(title.position = "top"),
+         shape = guide_legend(title.position = "top", title = "Plant type")) +
+  apatheme + theme(legend.position = "bottom")
+pca_plot_litt
+
+ggarrange(pca_plot_litt, pca_litt_contributions_plot, nrow = 1, widths = c(1, 0.5))
+
+ggsave(here::here("plots/PCAs/litter_chem_pca_pH_plant.png"),
+       width = 100 * 1.3, height = 100, units = "mm", dpi = 300)
+
+metadata <- metadata |> rownames_to_column("SampleID")
+litter_md <- metadata |> filter(str_ends(SampleID, "1|2")) |> column_to_rownames("SampleID")
+
+# PCA on litter-only samples
+pca_litt_md <- prcomp(~ pH + crude_protein + cellulose + hemicellulose + lignin,
+                      data = litter_md[, c(11, 15:19)], center = T, scale. = T, na.action = na.exclude)
+summary(pca_litt_md)
+
+pca_litt_sq_loadings_md   <- pca_litt_md$rotation^2
+pca_litt_contributions_md <- sweep(pca_litt_sq_loadings_md, 2, colSums(pca_litt_sq_loadings_md), FUN = "/") * 100
+print(pca_litt_contributions_md)
+
+# PERMANOVA
+litter_PERMANOVA <- adonis2(
+  dist(scale(litter_md[, c(11, 15:17, 19)])) ~ Plant_type,
+  data = litter_md, permutations = 999)
+litter_PERMANOVA
+
+grass_litter_PERMANOVA <- adonis2(
+  dist(scale(litter_md |> dplyr::filter(Litter_type == "G") |> dplyr::select(c(11, 15:17, 19)))) ~ Ecosystem,
+  data = litter_md |> dplyr::filter(Litter_type == "G"),
+  permutations = 999)
+grass_litter_PERMANOVA
+
+# Read PRIMER PERMANOVA variance estimates
+litter_PERMANOVA_PRIMER <- read.table(
+  here::here("PERMANOVA_litter_chem_VarEstimates.txt"), header = T, sep = "\t") |>
+  dplyr::filter(Source != "V(reserve_code)") |>
+  mutate(percent = Estimate / sum(Estimate))
+
+pca_litt_contributions_md <- as.data.frame(pca_litt_contributions_md) |>
+  rownames_to_column(var = "Variable") |>
+  pivot_longer(cols = c(2:6), names_to = "PC", values_to = "Percent")
+
+pca_litt_contributions_plot_md <- pca_litt_contributions_md |>
+  filter(PC %in% c("PC1", "PC2")) |>
+  mutate(Variable = gsub("_", " ", Variable)) |>
+  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
+  geom_col() +
+  scale_fill_manual(values = c("#8B4513", "#D2691E", "#F4A460", "#FFD700", "black")) +
+  labs(y = "% of variance contribution") +
+  apatheme +
+  theme(axis.title.x = element_blank())
+
+pca_litt_contributions_plot_md
+
+pca_litt_df_md   <- data.frame(pca_litt_md$x)
+pca_litt_df_md   <- merge(pca_litt_df_md, litter_md, by = "row.names", all.x = T)
+PCAloads_litt_md <- data.frame(Variables = rownames(pca_litt_md$rotation), pca_litt_md$rotation)
+
+pca_plot_litt_md <- ggplot(pca_litt_df_md, aes(PC1, PC2)) +
+  geom_point(data = pca_litt_df, aes(color = Ecosystem, shape = Plant_type), size = 4, alpha = 0.75) +
+  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
+  geom_segment(data = PCAloads_litt_md,
+               aes(x = 0, xend = PC1 * 1, y = 0, yend = PC2 * 1),
+               arrow = arrow(length = unit(0.3, "mm")), colour = "grey", inherit.aes = FALSE) +
+  ggrepel::geom_text_repel(data = PCAloads_litt_md,
+                            aes(x = PC1 * 1.07, y = PC2 * 1.07,
+                                label = gsub("_", " ", Variables)),
+                            size = 4, colour = "darkblue", alpha = 0.95, fontface = "bold") +
+  xlab("PC1 (53.47%)") + ylab("PC2 (18.10%)") +
+  guides(color = "none",
+         shape = guide_legend(title.position = "top", title = "Litter type")) +
+  apatheme +
+  theme(legend.position = c(0.9, 0.85),
+        legend.background = element_rect(fill = alpha("white", 0.6)),
+        legend.key.size = unit(0.3, "cm"), legend.spacing.y = unit(0.15, "cm"),
+        legend.margin = ggplot2::margin(2, 2, 2, 2),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 11))
+
+pca_plot_litt_md
+
+litt_plot_final <- ggarrange(pca_plot_litt_md, pca_litt_contributions_plot_md,
+                             nrow = 1, widths = c(1, 0.5),
+                             labels = c("1B.1", "1B.2"), hjust = 0, vjust = 1)
+litt_plot_final
+
+ggsave(here::here("plots/PCAs/litter_chem_pca_ecosystem.png"),
+       width = 220, height = 110, units = "mm", dpi = 300)
+
+# Litter chemistry composition barplot
+litter_chem_comp_barplot <- litter_md |>
+  group_by(Plant_type) |>
+  reframe(
+    crude_protein = mean(crude_protein, na.rm = TRUE),
+    cellulose     = mean(cellulose,     na.rm = TRUE),
+    hemicellulose = mean(hemicellulose, na.rm = TRUE),
+    lignin        = mean(lignin,        na.rm = TRUE)
+  ) |>
+  pivot_longer(cols = c(2:5), names_to = "variable", values_to = "value") |>
+  mutate(variable = gsub("_", " ", variable)) |>
+  mutate(variable = factor(variable,
+                            levels = c("crude protein", "lignin", "hemicellulose", "cellulose"))) |>
+  ggplot(aes(x = Plant_type, y = value, fill = variable)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Litter Type", y = "% of dry weight content", fill = "Component") +
+  scale_fill_manual(values = c("#D2691E", "#FFD700", "#F4A460", "#8B4513")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), panel.grid = element_blank())
+
+print(litter_chem_comp_barplot)
+
+# Correlation pairs plot
+panel_cor_sig <- function(data, mapping, method = "pearson", alpha = 0.05, ...) {
+  x  <- GGally::eval_data_col(data, mapping$x)
+  y  <- GGally::eval_data_col(data, mapping$y)
+  ok <- stats::complete.cases(x, y)
+  ct <- suppressWarnings(stats::cor.test(x[ok], y[ok], method = method))
+  r  <- unname(ct$estimate); p <- ct$p.value
+  lab <- sprintf("%.2f%s", r,
+                 ifelse(p < .001, "***", ifelse(p < .01, "**", ifelse(p < .05, "*", ""))))
+  sig <- is.finite(p) && p < alpha
+  ggplot() +
+    annotate("text", x = .5, y = .5, label = lab, size = 5,
+             fontface = if (sig) "bold" else "plain",
+             colour   = if (sig) "firebrick" else "grey40") +
+    theme_void()
+}
+
+panel_scatter_sig <- function(data, mapping, method = "lm", alpha = 0.05, ...) {
+  x  <- GGally::eval_data_col(data, mapping$x)
+  y  <- GGally::eval_data_col(data, mapping$y)
+  ok <- stats::complete.cases(x, y)
+  p  <- tryCatch(stats::cor.test(x[ok], y[ok])$p.value, error = function(e) NA_real_)
+  sig <- is.finite(p) && p < alpha
+  ggplot(data, mapping) +
+    geom_point(size = 1.6, alpha = if (sig) 0.7 else 0.15) +
+    geom_smooth(method = method, se = FALSE,
+                linewidth = if (sig) 0.9 else 0.4,
+                linetype  = if (sig) "solid" else "dashed")
+}
+
+GGally::ggpairs(litter_md,
+                columns = c("pH", "cellulose", "crude_protein", "hemicellulose", "lignin"),
+                lower = list(continuous = panel_scatter_sig),
+                upper = list(continuous = panel_cor_sig),
+                diag  = list(continuous = GGally::wrap("densityDiag")))
+
+ggsave(here::here("plots/linear_regression/litter_chem_corrplot.png"),
+       width = 180, height = 180 * 0.75, units = "mm", dpi = 320)
+```
+
+```{r save-rds, include=FALSE}
+saveRDS(metadata,  here::here("results/rds/metadata_litter.rds"))
+saveRDS(litter_md,  here::here("results/rds/litter_md.rds"))
+saveRDS(pca_litt_df_md, here::here("results/rds/pca_litt_df_md.rds"))
+saveRDS(PCAloads_litt_md, here::here("results/rds/PCAloads_litt_md.rds"))
+saveRDS(pca_litt_df, here::here("results/rds/pca_litt_df.rds"))
+```

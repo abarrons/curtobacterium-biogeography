@@ -1,0 +1,243 @@
+---
+title: "09 — Linear Regression"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(ggpubr)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+md4dbrda           <- readRDS(here::here("results/rds/md4dbrda.rds"))
+md4dbrda_clades    <- readRDS(here::here("results/rds/md4dbrda_clades.rds"))
+md4dbrda_subclades <- readRDS(here::here("results/rds/md4dbrda_subclades.rds"))
+clim_vars_PC       <- readRDS(here::here("results/rds/clim_vars_PC.rds"))
+litter_vars        <- readRDS(here::here("results/rds/litter_vars.rds"))
+```
+
+#### Linear regression plots
+
+```{r clade-subclade-linreg, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
+## now let's plot the abundance of each clade and subclade along the variables that were selecte as the most informative by AIC procedure
+
+## clades
+#head(clades_rar_otutab)
+colnames(clades_rar_otutab) <- tax$clade[match(colnames(clades_rar_otutab), row.names(tax))]
+
+clades_rar_otutab <- sweep(clades_rar_otutab, 1, rowSums(clades_rar_otutab), FUN = "/")
+
+
+
+#head(md4dbrda_clades)
+clades_Ab_md<- merge(clades_rar_otutab,
+                     md4dbrda_clades %>%
+                       dplyr::select(reserve_code,
+                                     Litter_type,
+                                     pH,
+                                     MAT,
+                                     MAP,
+                                     `P Seas`,
+                                     `P WarmQ`,
+                                     `T Iso`,
+                                     `T Diurn`,
+                                     `T MinColdMo`,
+                                     `T DryQ`,
+                                     `P DryMo`,
+                                     crude_protein, cellulose, hemicellulose, lignin,
+                                     all_of(starts_with("PC"))),
+                     by = "row.names")
+
+clades_Ab_md <- reshape2::melt(clades_Ab_md, id = c("Row.names",
+                                                    "pH",
+                                                    "MAT",
+                                                    "MAP",
+                                                    "P Seas",
+                                                    "P WarmQ",
+                                                    "T Iso",
+                                                    "T Diurn",
+                                                    "T MinColdMo",
+                                                    "T DryQ",
+                                                    "P DryMo",
+                                                    "reserve_code",
+                                                    "Litter_type",
+                                                    "crude_protein", 
+                                                    "cellulose", 
+                                                    "hemicellulose",
+                                                    "lignin",
+                                                    "PC1.clim", "PC2.clim", "PC1.litt", "PC2.litt")) %>%
+  dplyr::rename(Clade = variable, Abundance = value) %>%
+  dplyr::group_by(reserve_code, Litter_type, Clade) %>%
+  mutate(Clade = factor(Clade, levels = c("I", "II", "III", "IV", "V", "UND"))) |>
+  ungroup()
+  #summarise_at(vars(pH, Annual.Mean.Temperature, Annual.Precipitation, Precipitation.Seasonality, Precipitation.of.Warmest.Quarter, Abundance), mean)
+
+
+for (variable in colnames(clades_Ab_md)[c(2:11,14:21)]) {
+  clades_ab_VS_vars_plot <- ggplot(data = clades_Ab_md,
+                                 aes(x = !!sym(variable), y = Abundance, color = Clade
+                                     #, shape = Litter_type
+                                     )) +
+  #geom_line() +
+  #geom_abline(aes(colour = Clade)) +
+    geom_smooth(aes(fill = Clade), method = "lm"
+                ) +
+    stat_regline_equation(
+    aes(label =  paste(..adj.rr.label.., sep = "~~~~")),
+    #label.x.npc = rep(0.1, 6),
+    label.y = 0.65) +
+  geom_point(size = 4) +
+  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
+  scale_fill_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  facet_grid(Clade~.) +
+  labs(x = variable, y = "Relative Abundance", color = "Clade"#, shape = "Litter Type"
+       ) +  # Specify axis and legend labels
+  apatheme
+
+  print(clades_ab_VS_vars_plot)
+  
+  ggsave(filename = paste(here::here("plots/linear_regression/clades_Ab_vs"),variable,"png", sep = "."),
+       width =  30,
+       height = 40,
+       units = "cm",
+       dpi = 320)
+  
+}
+
+
+## subclades
+
+#head(subclades_rar_otutab)
+colnames(subclades_rar_otutab) <- tax$subclade[match(colnames(subclades_rar_otutab), row.names(tax))]
+#head(md4dbrda_subclades)
+
+subclades_rar_otutab <- sweep(subclades_rar_otutab, 1, rowSums(subclades_rar_otutab), FUN = "/")
+
+
+
+subclades_Ab_md<- merge(subclades_rar_otutab, md4dbrda_subclades %>%
+                          dplyr::select(reserve_code,
+                                     Litter_type,
+                                     pH,
+                                     MAT,
+                                     MAP,
+                                     `P Seas`,
+                                     `P WarmQ`,
+                                     `T Iso`,
+                                     `T Diurn`,
+                                     `T MinColdMo`,
+                                     `T DryQ`,
+                                     `P DryMo`,
+                                     crude_protein, cellulose, hemicellulose, lignin,
+                                     all_of(starts_with("PC"))),
+                        by = "row.names")
+
+
+subclades_sorted <- c()
+
+for(Clade in sort(unique(tax$clade))[c(1:4,6)]) {
+  # filter each clade and sort
+  temp_clade <- tax %>%
+    filter(clade == Clade & !is.na(subclade)) %>%
+    dplyr::select(subclade) %>%
+    distinct() %>%
+    arrange(subclade) %>%
+    pull()
+  # concatenate sorted by clade subclades
+  subclades_sorted <-c(subclades_sorted, temp_clade)
+  # create vector names for each clade
+  vec_name <-paste("clade", Clade, "subclades", sep = "_")
+  # create vector
+  assign(vec_name, temp_clade)
+}
+
+subclades_Ab_md <- reshape2::melt(subclades_Ab_md, id = c("Row.names",
+                                                    "pH",
+                                                    "MAT",
+                                                    "MAP",
+                                                    "P Seas",
+                                                    "P WarmQ",
+                                                    "T Iso",
+                                                    "T Diurn",
+                                                    "T MinColdMo",
+                                                    "T DryQ",
+                                                    "P DryMo",
+                                                    "reserve_code",
+                                                    "Litter_type",
+                                                    "crude_protein", 
+                                                    "cellulose", 
+                                                    "hemicellulose",
+                                                    "lignin",
+                                                    "PC1.clim", "PC2.clim", "PC1.litt", "PC2.litt")) %>%
+  dplyr::rename(Subclade = variable, Abundance = value) %>%
+  dplyr::group_by(reserve_code, Litter_type, Subclade) %>%
+  mutate(clade = case_when(Subclade %in% clade_I_subclades ~ "I",
+                           Subclade %in% clade_II_subclades ~ "II",
+                           Subclade %in% clade_III_subclades ~ "III",
+                           Subclade %in% clade_IV_subclades ~ "IV",
+                           Subclade %in% clade_V_subclades ~ "V"#, Subclade %in% clade_UND_subclades ~ "UND"
+                           )) %>%
+  mutate(clade = factor(clade, levels = c("I", "II", "III", "IV", "V"#, "UND"
+                                          ))) |>
+  ungroup()
+  #summarise_at(vars(pH,
+  #                  Annual.Mean.Temperature,
+  #                  Mean.Diurnal.Range,
+  #                  Isothermality,
+  #                  Min.Temperature.of.Coldest.Month,
+  #                  Mean.Temperature.of.Driest.Quarter,
+  #                  Annual.Precipitation,
+  #                  Precipitation.of.Driest.Month,
+  #                  Abundance), mean)
+
+
+#for (variable in colnames(subclades_Ab_md)[c(2:11,14:17)]) {
+#  subclades_ab_VS_vars_plot <- ggplot(data = subclades_Ab_md,
+#                                 aes(x = !!sym(variable), y = Abundance, color = Subclade, shape = Litter_type)) +
+#    geom_smooth(aes(fill = Subclade), method = "lm"
+#                ) +
+#    #stat_regline_equation(
+#    #aes(label =  paste(..adj.rr.label.., sep = "~~~~")), position = "jitter",
+#    ##label.x.npc = rep(0.1, 6),
+#    #label.y = 650
+#    #) +
+#    ggpmisc::stat_poly_eq(formula = y ~ x, 
+#               aes(label = paste(..rr.label.., sep = "~~~~")), 
+#               parse = T,
+#               label.y = 0.9,
+#               vstep = 0.1) +
+#  #geom_line() +
+#  geom_point(size = 4) +
+#  scale_color_manual(values = subclade_colros, limits = subclades_sorted) +
+#    scale_fill_manual(values = subclade_colros, limits = subclades_sorted) +
+#    facet_grid(clade~Litter_type) +
+#    scale_y_continuous(labels = scales::percent_format(scale = 0.1)) +
+#  labs(x = variable, y = "Relative Abundance", color = "Subclade", shape = "Litter Type") +  # Specify axis and legend labels
+#  apatheme
+#
+#  print(subclades_ab_VS_vars_plot)
+#  
+#  ggsave(filename = paste(here::here("plots/subclades_Ab_vs"),variable,"png", sep = "."),
+#       width =  30,
+#       height = 40,
+#       units = "cm",
+#       dpi = 320)
+#}
+#
+```

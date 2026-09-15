@@ -1,0 +1,189 @@
+Reserve	Ecosystem	ID_Number	SampleID	Date_sampled	Litter_type	plot_cordsX	plot_cordsY	Elevation	Litter_species	Litter_species_common_name	pH	Plant_family	Plant_type
+Elliott Chaparral Reserve	Chaparral	28	28G1	2021-11-02	Grass	"32¼53'34.86""N"	"117¼5'29.92""W"	235	Avena fatua		6.59	Poaceae	Grass
+Elliott Chaparral Reserve	Chaparral	28	28G2	2021-11-02	Grass	"32¼53'34.86""N"	"117¼5'29.92""W"	235	Avena fatua		6.61	Poaceae	Grass
+Elliott Chaparral Reserve	Chaparral	28	28G3	2021-11-02	Grass	"32¼53'34.86""N"	"117¼5'29.92""W"	235	Avena fatua		6.54	Poaceae	Grass
+Elliott Chaparral Reserve	Chaparral	28	28G4	2021-11-02	Grass	"32¼53'34.86""N"	"117¼5'29.92""W"	235	Avena fatua		6.66	Poaceae	Grass
+Elliott Chaparral Reserve	Chaparral	28	28D1	2021-11-02	Dominant Vegetation	"32¼53'34.49""N"	"117¼5'32.00""W"	222	Rhus integrifolia	Lemonade Berry	6.5	Anacardiaceae	Shrub
+Elliott Chaparral Reserve	Chaparral	28	28D2	2021-11-02	Dominant Vegetation	"32¼53'34.49""N"	"117¼5'32.00""W"	222	Rhus integrifolia	Lemonade Berry	6.65	Anacardiaceae	Shrub
+Elliott Chaparral Reserve	Chaparral	28	28D3	2021-11-02	Dominant Vegetation	"32¼53'34.49""N"	"117¼5'32.00""W"	222	Rhus integrifolia	Lemonade Berry	6.53	Anacardiaceae	Shrub
+Elliott Chaparral Reserve	Chaparral	28	28D4	2021-11-02	Dominant Vegetation	"32¼53'34.49""N"	"117¼5'32.00""W"	222	Rhus integrifolia	Lemonade Berry	6.7	Anacardiaceae	Shrub
+Scripps Coastal Reserve	Coastal Marine	30	30G1	2021-11-02	Grass	"32¼52'32.46""N"	"117¼14'49.57""W"	113	Avena fatua		6.65	Poaceae	Grass
+Scripps Coastal Reserve	Coastal Marine	30	30G2	2021-11-02	Grass	"32¼52'32.46""N"	"117¼14'49.57""W"	113	Avena fatua		6.73	Poaceae	Grass
+Scripps Coastal Reserve	Coastal Marine	30	30G3	2021-11-02	Grass	"32¼52'32.46""N"	"117¼14'49.57""W"	113	Avena fatua		6.8	Poaceae	Grass
+Scripps Coastal Reserve	Coastal Marine	30	30G4	2021-11-02	Grass	"32¼52'32.46""N"	"117¼14'49.57""W"	113	Avena fatua		6.8	Poaceae	Grass
+Scripps Coastal Reserve	Coastal Marine	30	30D1	2021-11-02	Dominant Vegetation	"32¼52'32.52""N"	"117¼14'53.62""W"	110	Artemisa californica		6.91	Asteraceae	Shrub
+Scripps Coastal Reserve	Coastal Marine	30	30D2	2021-11-02	Dominant Vegetation	"32¼52'32.52""N"	"117¼14'53.62""W"	110	Artemisa californica		6.9	Asteraceae	Shrub
+Scripps Coastal Reserve	Coastal Marine	30	30D3	2021-11-02	Dominant Vegetation	"32¼52'32.52""N"	"117¼14'53.62""W"	110	Artemisa californica		6.9	Asteraceae	Shrub
+Scripps Coastal Reserve	Coastal Marine	30	30D4	2021-11-02	Dominant Vegetation	"32¼52'32.52""N"	"117¼14'53.62""W"	110	Artemisa californica		6.89	Asteraceae	Shrub
+James San Jacinto Mountains Reserve	Montane	24	24G1	2021-11-30	Grass	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Bromus diandrus	Ripcut grass	6.1	Poaceae	Grass
+James San Jacinto Mountains Reserve	Montane	24	24G2	2021-11-30	Grass	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Bromus diandrus	Ripcut grass	6.07	Poaceae	Grass
+James San Jacinto Mountains Reserve	Montane	24	24G3	2021-11-30	Grass	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Bromus diandrus	Ripcut grass	6.07	Poaceae	Grass
+James San Jacinto Mountains Reserve	Montane	24	24G4	2021-11-30	Grass	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Bromus diandrus	Ripcut grass	6.27	Poaceae	Grass
+James San Jacinto Mountains Reserve	Montane	24	24D1	2021-11-30	Dominant Vegetation	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Pinus ponderosa		5.97	Pinaceae	Pine
+James San Jacinto Mountains Reserve	Montane	24	24D2	2021-11-30	Dominant Vegetation	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Pinus ponderosa		6.01	Pinaceae	Pine
+James San Jacinto Mountains Reserve	Montane	24	24D3	2021-11-30	Dominant Vegetation	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Pinus ponderosa		6.01	Pinaceae	Pine
+James San Jacinto Mountains Reserve	Montane	24	24D4	2021-11-30	Dominant Vegetation	"33¼48'38.08""N"	"116¼46'27.15""W"	1652	Pinus ponderosa		5.99	Pinaceae	Pine
+Emerson Oaks Reserve	Oak Woodland	23	23G1	2021-11-30	Grass	"33¼28'6.83""N"	"117¼2'32.90""W"	452	"Bromus diandrus, Schismus barbatus, Avena barbata"		6.39	Poaceae	Grass
+Emerson Oaks Reserve	Oak Woodland	23	23G2	2021-11-30	Grass	"33¼28'6.83""N"	"117¼2'32.90""W"	452	"Bromus diandrus, Schismus barbatus, Avena barbata"		6.5	Poaceae	Grass
+Emerson Oaks Reserve	Oak Woodland	23	23G3	2021-11-30	Grass	"33¼28'6.83""N"	"117¼2'32.90""W"	452	"Bromus diandrus, Schismus barbatus, Avena barbata"		6.29	Poaceae	Grass
+Emerson Oaks Reserve	Oak Woodland	23	23G4	2021-11-30	Grass	"33¼28'6.83""N"	"117¼2'32.90""W"	452	"Bromus diandrus, Schismus barbatus, Avena barbata"		6.46	Poaceae	Grass
+Emerson Oaks Reserve	Oak Woodland	23	23D1	2021-11-30	Dominant Vegetation	"33¼28'8.90""N"	"117¼2'36.92""W"	452	Quercus berberidifolia		6.14	Fagaceae	Tree/shrub
+Emerson Oaks Reserve	Oak Woodland	23	23D2	2021-11-30	Dominant Vegetation	"33¼28'8.90""N"	"117¼2'36.92""W"	452	Quercus berberidifolia		6.32	Fagaceae	Tree/shrub
+Emerson Oaks Reserve	Oak Woodland	23	23D3	2021-11-30	Dominant Vegetation	"33¼28'8.90""N"	"117¼2'36.92""W"	452	Quercus berberidifolia		6.46	Fagaceae	Tree/shrub
+Emerson Oaks Reserve	Oak Woodland	23	23D4	2021-11-30	Dominant Vegetation	"33¼28'8.90""N"	"117¼2'36.92""W"	452	Quercus berberidifolia		6.35	Fagaceae	Tree/shrub
+Motte Rimrock Reserve	Chaparral	25	25G1	2021-11-30	Grass	"33¼48'8.64""N"	"117¼15'37.33""W"	546	Schismus arabicus		6.43	Poaceae	Grass
+Motte Rimrock Reserve	Chaparral	25	25G2	2021-11-30	Grass	"33¼48'8.64""N"	"117¼15'37.33""W"	546	Schismus arabicus		6.46	Poaceae	Grass
+Motte Rimrock Reserve	Chaparral	25	25G3	2021-11-30	Grass	"33¼48'8.64""N"	"117¼15'37.33""W"	546	Schismus arabicus		6.41	Poaceae	Grass
+Motte Rimrock Reserve	Chaparral	25	25G4	2021-11-30	Grass	"33¼48'8.64""N"	"117¼15'37.33""W"	546	Schismus arabicus		6.46	Poaceae	Grass
+Motte Rimrock Reserve	Chaparral	25	25D1	2021-11-30	Dominant Vegetation	"33¼48'4.91""N"	"117¼15'34.63""W"	543	Salix exigua		6.25	Salicaceae	Tree/shrub
+Motte Rimrock Reserve	Chaparral	25	25D2	2021-11-30	Dominant Vegetation	"33¼48'4.91""N"	"117¼15'34.63""W"	543	Salix exigua		6.2	Salicaceae	Tree/shrub
+Motte Rimrock Reserve	Chaparral	25	25D3	2021-11-30	Dominant Vegetation	"33¼48'4.91""N"	"117¼15'34.63""W"	543	Salix exigua		6.18	Salicaceae	Tree/shrub
+Motte Rimrock Reserve	Chaparral	25	25D4	2021-11-30	Dominant Vegetation	"33¼48'4.91""N"	"117¼15'34.63""W"	543	Salix exigua		6.26	Salicaceae	Tree/shrub
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16G1	2022-02-08	Grass	"33¼14'24.09""N"	"116¼23'23.34""W"	210	Schismus barbatus		4.25	Poaceae	Grass
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16G2	2022-02-08	Grass	"33¼14'24.09""N"	"116¼23'23.34""W"	210	Schismus barbatus		3.93	Poaceae	Grass
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16G3	2022-02-08	Grass	"33¼14'24.09""N"	"116¼23'23.34""W"	210	Schismus barbatus		4.37	Poaceae	Grass
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16G4	2022-02-08	Grass	"33¼14'24.09""N"	"116¼23'23.34""W"	210	Schismus barbatus		4.33	Poaceae	Grass
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16D1	2022-02-08	Dominant Vegetation	"33¼14'23.35""N"	"116¼23'27.20""W"	212	Larrea tridentata	Creosote bush	4.98	Zygophyllaceae	Shrub
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16D2	2022-02-08	Dominant Vegetation	"33¼14'23.35""N"	"116¼23'27.20""W"	212	Larrea tridentata	Creosote bush	4.7	Zygophyllaceae	Shrub
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16D3	2022-02-08	Dominant Vegetation	"33¼14'23.35""N"	"116¼23'27.20""W"	212	Larrea tridentata	Creosote bush	4.61	Zygophyllaceae	Shrub
+Steele/Burnand Anza-Borrego Desert Research Center	Desert	16	16D4	2022-02-08	Dominant Vegetation	"33¼14'23.35""N"	"116¼23'27.20""W"	212	Larrea tridentata	Creosote bush	4.32	Zygophyllaceae	Shrub
+Sweeney Granite Mountains Desert Research Center	Desert	26	26G1	2022-02-15	Grass	"34¼46'58.54""N"	"115¼39'3.85""W"	1298	"Schismus barbatus, Bromus rubens"		3.75	Poaceae	Grass
+Sweeney Granite Mountains Desert Research Center	Desert	26	26G2	2022-02-15	Grass	"34¼46'58.54""N"	"115¼39'3.85""W"	1298	"Schismus barbatus, Bromus rubens"		3.78	Poaceae	Grass
+Sweeney Granite Mountains Desert Research Center	Desert	26	26G3	2022-02-15	Grass	"34¼46'58.54""N"	"115¼39'3.85""W"	1298	"Schismus barbatus, Bromus rubens"		3.73	Poaceae	Grass
+Sweeney Granite Mountains Desert Research Center	Desert	26	26G4	2022-02-15	Grass	"34¼46'58.54""N"	"115¼39'3.85""W"	1298	"Schismus barbatus, Bromus rubens"		3.61	Poaceae	Grass
+Sweeney Granite Mountains Desert Research Center	Desert	26	26D1	2022-02-15	Dominant Vegetation	"34¼46'57.41""N"	"115¼39'7.11""W"	1302	Larrea tridentata	Creosote bush	4.6	Zygophyllaceae	Shrub
+Sweeney Granite Mountains Desert Research Center	Desert	26	26D2	2022-02-15	Dominant Vegetation	"34¼46'57.41""N"	"115¼39'7.11""W"	1302	Larrea tridentata	Creosote bush	4.85	Zygophyllaceae	Shrub
+Sweeney Granite Mountains Desert Research Center	Desert	26	26D3	2022-02-15	Dominant Vegetation	"34¼46'57.41""N"	"115¼39'7.11""W"	1302	Larrea tridentata	Creosote bush	4.83	Zygophyllaceae	Shrub
+Sweeney Granite Mountains Desert Research Center	Desert	26	26D4	2022-02-15	Dominant Vegetation	"34¼46'57.41""N"	"115¼39'7.11""W"	1302	Larrea tridentata	Creosote bush	4.58	Zygophyllaceae	Shrub
+Coal Oil Point Natural Reserve	Coastal Marine	32	32G1	2022-03-07	Grass	"34¼25'0.15""N"	"119¼52'44.91""W"	19	"Stipa pulchra, Phalaris aquatica, Elymus triticoides"		5.12	Poaceae	Grass
+Coal Oil Point Natural Reserve	Coastal Marine	32	32G2	2022-03-07	Grass	"34¼25'0.15""N"	"119¼52'44.91""W"	19	"Stipa pulchra, Phalaris aquatica, Elymus triticoides"		5.18	Poaceae	Grass
+Coal Oil Point Natural Reserve	Coastal Marine	32	32G3	2022-03-07	Grass	"34¼25'0.15""N"	"119¼52'44.91""W"	19	"Stipa pulchra, Phalaris aquatica, Elymus triticoides"		5.63	Poaceae	Grass
+Coal Oil Point Natural Reserve	Coastal Marine	32	32G4	2022-03-07	Grass	"34¼25'0.15""N"	"119¼52'44.91""W"	19	"Stipa pulchra, Phalaris aquatica, Elymus triticoides"		5.58	Poaceae	Grass
+Coal Oil Point Natural Reserve	Coastal Marine	32	32D1	2022-03-07	Dominant Vegetation	"34¼25'0.86""N"	"119¼52'51.20""W"	24	Artemisa californica		6.44	Asteraceae	Shrub
+Coal Oil Point Natural Reserve	Coastal Marine	32	32D2	2022-03-07	Dominant Vegetation	"34¼25'0.86""N"	"119¼52'51.20""W"	24	Artemisa californica		6.1	Asteraceae	Shrub
+Coal Oil Point Natural Reserve	Coastal Marine	32	32D3	2022-03-07	Dominant Vegetation	"34¼25'0.86""N"	"119¼52'51.20""W"	24	Artemisa californica		6.08	Asteraceae	Shrub
+Coal Oil Point Natural Reserve	Coastal Marine	32	32D4	2022-03-07	Dominant Vegetation	"34¼25'0.86""N"	"119¼52'51.20""W"	24	Artemisa californica		6.26	Asteraceae	Shrub
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33G1	2022-03-08	Grass	"35¼32'11.13""N"	"121¼5'1.06""W"	42	Bromus carinatus		5.06	Poaceae	Grass
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33G2	2022-03-08	Grass	"35¼32'11.13""N"	"121¼5'1.06""W"	42	Bromus carinatus		5.06	Poaceae	Grass
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33G3	2022-03-08	Grass	"35¼32'11.13""N"	"121¼5'1.06""W"	42	Bromus carinatus		5.15	Poaceae	Grass
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33G4	2022-03-08	Grass	"35¼32'11.13""N"	"121¼5'1.06""W"	42	Bromus carinatus		4.92	Poaceae	Grass
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33D1	2022-03-08	Dominant Vegetation	"35¼32'14.42""N"	"121¼5'2.14""W"	54	Pinus radiata	Monterrey pine	4.8	Pinaceae	Pine
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33D2	2022-03-08	Dominant Vegetation	"35¼32'14.42""N"	"121¼5'2.14""W"	54	Pinus radiata	Monterrey pine	4.95	Pinaceae	Pine
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33D3	2022-03-08	Dominant Vegetation	"35¼32'14.42""N"	"121¼5'2.14""W"	54	Pinus radiata	Monterrey pine	4.88	Pinaceae	Pine
+Kenneth S. Norris Rancho Marino Reserve	Coastal Marine	33	33D4	2022-03-08	Dominant Vegetation	"35¼32'14.42""N"	"121¼5'2.14""W"	54	Pinus radiata	Monterrey pine	5.51	Pinaceae	Pine
+Sedgwick Reserve	Oak Woodland	35	35G1	2022-03-08	Grass	"34¼41'35.79""N"	"120¼2'51.80""W"	337	Stipa pulchra	Purple needle grass	4.5	Poaceae	Grass
+Sedgwick Reserve	Oak Woodland	35	35G2	2022-03-08	Grass	"34¼41'35.79""N"	"120¼2'51.80""W"	337	Stipa pulchra	Purple needle grass	5.05	Poaceae	Grass
+Sedgwick Reserve	Oak Woodland	35	35G3	2022-03-08	Grass	"34¼41'35.79""N"	"120¼2'51.80""W"	337	Stipa pulchra	Purple needle grass	4.61	Poaceae	Grass
+Sedgwick Reserve	Oak Woodland	35	35G4	2022-03-08	Grass	"34¼41'35.79""N"	"120¼2'51.80""W"	337	Stipa pulchra	Purple needle grass	5.24	Poaceae	Grass
+Sedgwick Reserve	Oak Woodland	35	35D1	2022-03-08	Dominant Vegetation	"34¼41'34.16""N"	"120¼2'52.74""W"	356	Quercus douglasii	Blue oak	5.41	Fagaceae	Tree
+Sedgwick Reserve	Oak Woodland	35	35D2	2022-03-08	Dominant Vegetation	"34¼41'34.16""N"	"120¼2'52.74""W"	356	Quercus douglasii	Blue oak	4.42	Fagaceae	Tree
+Sedgwick Reserve	Oak Woodland	35	35D3	2022-03-08	Dominant Vegetation	"34¼41'34.16""N"	"120¼2'52.74""W"	356	Quercus douglasii	Blue oak	4.91	Fagaceae	Tree
+Sedgwick Reserve	Oak Woodland	35	35D4	2022-03-08	Dominant Vegetation	"34¼41'34.16""N"	"120¼2'52.74""W"	356	Quercus douglasii	Blue oak	4.57	Fagaceae	Tree
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40G1	2022-05-02	Grass	"36¼4'16.25""N"	"121¼35'35.19""W"	292	Avena barbata		6.12	Poaceae	Grass
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40G2	2022-05-02	Grass	"36¼4'16.25""N"	"121¼35'35.19""W"	293	Avena barbata		5.39	Poaceae	Grass
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40G3	2022-05-02	Grass	"36¼4'16.25""N"	"121¼35'35.19""W"	294	Avena barbata		4.73	Poaceae	Grass
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40G4	2022-05-02	Grass	"36¼4'16.25""N"	"121¼35'35.19""W"	295	Avena barbata		5.43	Poaceae	Grass
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40D1	2022-05-02	Dominant Vegetation	"36¼3'27.8""N"	"121¼35'10.89""W"	173	Baccharis pilularis	Coyote Brush	6.06	Asteraceae	Shrub
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40D2	2022-05-02	Dominant Vegetation	"36¼3'27.8""N"	"121¼35'10.89""W"	173	Baccharis pilularis	Coyote Brush	6.17	Asteraceae	Shrub
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40D3	2022-05-02	Dominant Vegetation	"36¼3'27.8""N"	"121¼35'10.89""W"	173	Baccharis pilularis	Coyote Brush	6.16	Asteraceae	Shrub
+Landels-Hill Big Creek Reserve	Coastal Marine	40	40D4	2022-05-02	Dominant Vegetation	"36¼3'27.8""N"	"121¼35'10.89""W"	173	Baccharis pilularis	Coyote Brush	6.04	Asteraceae	Shrub
+Fort Ord Natural Reserve	Chaparral	39	39G1	2022-05-02	Grass	"36¼41'8.06""N"	"121¼46'37.39""W"	34	"Bromus diandrus, Briza maxima, Avena barbata"		5.58	Poaceae	Grass
+Fort Ord Natural Reserve	Chaparral	39	39G2	2022-05-02	Grass	"36¼41'8.06""N"	"121¼46'37.39""W"	34	"Bromus diandrus, Briza maxima, Avena barbata"		5.79	Poaceae	Grass
+Fort Ord Natural Reserve	Chaparral	39	39G3	2022-05-02	Grass	"36¼41'8.06""N"	"121¼46'37.39""W"	34	"Bromus diandrus, Briza maxima, Avena barbata"		5.37	Poaceae	Grass
+Fort Ord Natural Reserve	Chaparral	39	39G4	2022-05-02	Grass	"36¼41'8.06""N"	"121¼46'37.39""W"	34	"Bromus diandrus, Briza maxima, Avena barbata"		5.84	Poaceae	Grass
+Fort Ord Natural Reserve	Chaparral	39	39D1	2022-05-02	Dominant Vegetation	"36¼41'6.05""N"	"121¼46'43.37""W"	46	Arctostaphylos pumila	Sandmat manzanita	4.88	Ericaceae	Shrub
+Fort Ord Natural Reserve	Chaparral	39	39D2	2022-05-02	Dominant Vegetation	"36¼41'6.05""N"	"121¼46'43.37""W"	46	Arctostaphylos pumila	Sandmat manzanita	5.42	Ericaceae	Shrub
+Fort Ord Natural Reserve	Chaparral	39	39D3	2022-05-02	Dominant Vegetation	"36¼41'6.05""N"	"121¼46'43.37""W"	46	Arctostaphylos pumila	Sandmat manzanita	5.33	Ericaceae	Shrub
+Fort Ord Natural Reserve	Chaparral	39	39D4	2022-05-02	Dominant Vegetation	"36¼41'6.05""N"	"121¼46'43.37""W"	46	Arctostaphylos pumila	Sandmat manzanita	4.55	Ericaceae	Shrub
+Hastings Natural History Reservation	Oak Woodland	04	04G1	2022-05-03	Grass	"36¼23'2.91""N"	"121¼33'15.71""W"	530	"Bromus diandrus, Avena barbata"		5.53	Poaceae	Grass
+Hastings Natural History Reservation	Oak Woodland	04	04G2	2022-05-03	Grass	"36¼23'2.91""N"	"121¼33'15.71""W"	530	"Bromus diandrus, Avena barbata"		6.02	Poaceae	Grass
+Hastings Natural History Reservation	Oak Woodland	04	04G3	2022-05-03	Grass	"36¼23'2.91""N"	"121¼33'15.71""W"	530	"Bromus diandrus, Avena barbata"		5.61	Poaceae	Grass
+Hastings Natural History Reservation	Oak Woodland	04	04G4	2022-05-03	Grass	"36¼23'2.91""N"	"121¼33'15.71""W"	530	"Bromus diandrus, Avena barbata"		5.01	Poaceae	Grass
+Hastings Natural History Reservation	Oak Woodland	04	04D1	2022-05-03	Dominant Vegetation	"36¼23'1.54""N"	"121¼33'14.4""W"	543	"Quercus douglasii, Quercus lobata, Quercus kelloggii"		5.93	Fagaceae	Tree
+Hastings Natural History Reservation	Oak Woodland	04	04D2	2022-05-03	Dominant Vegetation	"36¼23'1.54""N"	"121¼33'14.4""W"	543	"Quercus douglasii, Quercus lobata, Quercus kelloggii"		5.33	Fagaceae	Tree
+Hastings Natural History Reservation	Oak Woodland	04	04D3	2022-05-03	Dominant Vegetation	"36¼23'1.54""N"	"121¼33'14.4""W"	543	"Quercus douglasii, Quercus lobata, Quercus kelloggii"		5.18	Fagaceae	Tree
+Hastings Natural History Reservation	Oak Woodland	04	04D4	2022-05-03	Dominant Vegetation	"36¼23'1.54""N"	"121¼33'14.4""W"	543	"Quercus douglasii, Quercus lobata, Quercus kelloggii"		5.2	Fagaceae	Tree
+Younger Lagoon Reserve	Coastal Marine	41	41G1	2022-05-03	Grass	"36¼57'7.41""N"	"122¼4'1.86""W"	12	"Briza maxima, Avena barbta, Bromus diandrus, Stipa pulchra"		5.54	Poaceae	Grass
+Younger Lagoon Reserve	Coastal Marine	41	41G2	2022-05-03	Grass	"36¼57'7.41""N"	"122¼4'1.86""W"	12	"Briza maxima, Avena barbta, Bromus diandrus, Stipa pulchra"		6.29	Poaceae	Grass
+Younger Lagoon Reserve	Coastal Marine	41	41G3	2022-05-03	Grass	"36¼57'7.41""N"	"122¼4'1.86""W"	12	"Briza maxima, Avena barbta, Bromus diandrus, Stipa pulchra"		5.6	Poaceae	Grass
+Younger Lagoon Reserve	Coastal Marine	41	41G4	2022-05-03	Grass	"36¼57'7.41""N"	"122¼4'1.86""W"	12	"Briza maxima, Avena barbta, Bromus diandrus, Stipa pulchra"		5.08	Poaceae	Grass
+Younger Lagoon Reserve	Coastal Marine	41	41D1	2022-05-03	Dominant Vegetation	"36¼57'7.23""N"	"122¼3'56.8""W"	14	Baccharis pilularis	Coyote Brush	6.31	Asteraceae	Shrub
+Younger Lagoon Reserve	Coastal Marine	41	41D2	2022-05-03	Dominant Vegetation	"36¼57'7.23""N"	"122¼3'56.8""W"	14	Baccharis pilularis	Coyote Brush	6.39	Asteraceae	Shrub
+Younger Lagoon Reserve	Coastal Marine	41	41D3	2022-05-03	Dominant Vegetation	"36¼57'7.23""N"	"122¼3'56.8""W"	14	Baccharis pilularis	Coyote Brush	5.79	Asteraceae	Shrub
+Younger Lagoon Reserve	Coastal Marine	41	41D4	2022-05-03	Dominant Vegetation	"36¼57'7.23""N"	"122¼3'56.8""W"	14	Baccharis pilularis	Coyote Brush	6.02	Asteraceae	Shrub
+Blue Oak Ranch Reserve	Oak Woodland	02	02G1	2022-05-04	Grass	"37¼22'58.84""N"	"121¼44'13.96""W"	605	"Avena barbata, Stipa pulchra, Agrostis exarata"		5.14	Poaceae	Grass
+Blue Oak Ranch Reserve	Oak Woodland	02	02G2	2022-05-04	Grass	"37¼22'58.84""N"	"121¼44'13.96""W"	605	"Avena barbata, Stipa pulchra, Agrostis exarata"		5.86	Poaceae	Grass
+Blue Oak Ranch Reserve	Oak Woodland	02	02G3	2022-05-04	Grass	"37¼22'58.84""N"	"121¼44'13.96""W"	605	"Avena barbata, Stipa pulchra, Agrostis exarata"		5.01	Poaceae	Grass
+Blue Oak Ranch Reserve	Oak Woodland	02	02G4	2022-05-04	Grass	"37¼22'58.84""N"	"121¼44'13.96""W"	605	"Avena barbata, Stipa pulchra, Agrostis exarata"		5.44	Poaceae	Grass
+Blue Oak Ranch Reserve	Oak Woodland	02	02D1	2022-05-04	Dominant Vegetation	"37¼23'0.95""N"	"121¼44'13.25""W"	627	Quercus douglasii	Blue oak	4.67	Fagaceae	Tree
+Blue Oak Ranch Reserve	Oak Woodland	02	02D2	2022-05-04	Dominant Vegetation	"37¼23'0.95""N"	"121¼44'13.25""W"	627	Quercus douglasii	Blue oak	4.82	Fagaceae	Tree
+Blue Oak Ranch Reserve	Oak Woodland	02	02D3	2022-05-04	Dominant Vegetation	"37¼23'0.95""N"	"121¼44'13.25""W"	627	Quercus douglasii	Blue oak	5.97	Fagaceae	Tree
+Blue Oak Ranch Reserve	Oak Woodland	02	02D4	2022-05-04	Dominant Vegetation	"37¼23'0.95""N"	"121¼44'13.25""W"	627	Quercus douglasii	Blue oak	5.12	Fagaceae	Tree
+Jepson Prairie Reserve	Grassland	09	09G1	2022-06-03	Grass	"38¼16'31""N"	"121¼49'25""W"	8	"Avena barbata, Bromus carinatus, Festuca arundinaca, Bromus diandrus"		5.66	Poaceae	Grass
+Jepson Prairie Reserve	Grassland	09	09G2	2022-06-03	Grass	"38¼16'31""N"	"121¼49'25""W"	8	"Avena barbata, Bromus carinatus, Festuca arundinaca, Bromus diandrus"		5.88	Poaceae	Grass
+Jepson Prairie Reserve	Grassland	09	09G3	2022-06-03	Grass	"38¼16'31""N"	"121¼49'25""W"	8	"Avena barbata, Bromus carinatus, Festuca arundinaca, Bromus diandrus"		5.78	Poaceae	Grass
+Jepson Prairie Reserve	Grassland	09	09G4	2022-06-03	Grass	"38¼16'31""N"	"121¼49'25""W"	8	"Avena barbata, Bromus carinatus, Festuca arundinaca, Bromus diandrus"		5.58	Poaceae	Grass
+Jepson Prairie Reserve	Grassland	09	09D1	2022-06-03	Dominant Vegetation	"38¼16'26""N"	"121¼49'27""W"	7	Lasthenia californica		5.65	Asteraceae	Annual herb
+Jepson Prairie Reserve	Grassland	09	09D2	2022-06-03	Dominant Vegetation	"38¼16'26""N"	"121¼49'27""W"	7	Lasthenia californica		5.6	Asteraceae	Annual herb
+Jepson Prairie Reserve	Grassland	09	09D3	2022-06-03	Dominant Vegetation	"38¼16'26""N"	"121¼49'27""W"	7	Lasthenia californica		5.35	Asteraceae	Annual herb
+Jepson Prairie Reserve	Grassland	09	09D4	2022-06-03	Dominant Vegetation	"38¼16'26""N"	"121¼49'27""W"	7	Lasthenia californica		5.41	Asteraceae	Annual herb
+Quail Ridge Reserve	Oak Woodland	12	12G1	2022-06-03	Grass	"38¼29'26""N"	"122¼9'10""W"	273	"Avena barbata, Alopecurus bratenis, Schismus barbatus, Brachypodium distachyon, Bromus hordeaceus"		5.97	Poaceae	Grass
+Quail Ridge Reserve	Oak Woodland	12	12G2	2022-06-03	Grass	"38¼29'26""N"	"122¼9'10""W"	273	"Avena barbata, Alopecurus bratenis, Schismus barbatus, Brachypodium distachyon, Bromus hordeaceus"		5.72	Poaceae	Grass
+Quail Ridge Reserve	Oak Woodland	12	12G3	2022-06-03	Grass	"38¼29'26""N"	"122¼9'10""W"	273	"Avena barbata, Alopecurus bratenis, Schismus barbatus, Brachypodium distachyon, Bromus hordeaceus"		5.45	Poaceae	Grass
+Quail Ridge Reserve	Oak Woodland	12	12G4	2022-06-03	Grass	"38¼29'26""N"	"122¼9'10""W"	273	"Avena barbata, Alopecurus bratenis, Schismus barbatus, Brachypodium distachyon, Bromus hordeaceus"		5.65	Poaceae	Grass
+Quail Ridge Reserve	Oak Woodland	12	12D1	2022-06-03	Dominant Vegetation	"38¼29'37""N"	"122¼09'04""W"	171	"Quercus douglasii, Quercus kelloggii"		4.43	Fagaceae	Tree
+Quail Ridge Reserve	Oak Woodland	12	12D2	2022-06-03	Dominant Vegetation	"38¼29'37""N"	"122¼09'04""W"	171	"Quercus douglasii, Quercus kelloggii"		5.07	Fagaceae	Tree
+Quail Ridge Reserve	Oak Woodland	12	12D3	2022-06-03	Dominant Vegetation	"38¼29'37""N"	"122¼09'04""W"	171	"Quercus douglasii, Quercus kelloggii"		4.6	Fagaceae	Tree
+Quail Ridge Reserve	Oak Woodland	12	12D4	2022-06-03	Dominant Vegetation	"38¼29'37""N"	"122¼09'04""W"	171	"Quercus douglasii, Quercus kelloggii"		4.52	Fagaceae	Tree
+McLaughlin Natural Reserve	Grassland	11	11G1	2022-06-04	Grass	"38¼51'55""N"	"122¼24'1""W"	709	"Stipa pulchra, Festuca microstachys"		4.75	Poaceae	Grass
+McLaughlin Natural Reserve	Grassland	11	11G2	2022-06-04	Grass	"38¼51'55""N"	"122¼24'1""W"	709	"Stipa pulchra, Festuca microstachys"		4.98	Poaceae	Grass
+McLaughlin Natural Reserve	Grassland	11	11G3	2022-06-04	Grass	"38¼51'55""N"	"122¼24'1""W"	709	"Stipa pulchra, Festuca microstachys"		4.81	Poaceae	Grass
+McLaughlin Natural Reserve	Grassland	11	11G4	2022-06-04	Grass	"38¼51'55""N"	"122¼24'1""W"	709	"Stipa pulchra, Festuca microstachys"		4.97	Poaceae	Grass
+McLaughlin Natural Reserve	Grassland	11	11D1	2022-06-04	Dominant Vegetation	"38¼52'19""N"	"122¼25'41""W"	658	"Avena barbata, Bromus diandrus"		5.82	Poaceae	Grass
+McLaughlin Natural Reserve	Grassland	11	11D2	2022-06-04	Dominant Vegetation	"38¼52'19""N"	"122¼25'41""W"	658	"Avena barbata, Bromus diandrus"		5.4	Poaceae	Grass
+McLaughlin Natural Reserve	Grassland	11	11D3	2022-06-04	Dominant Vegetation	"38¼52'19""N"	"122¼25'41""W"	658	"Avena barbata, Bromus diandrus"		5.77	Poaceae	Grass
+McLaughlin Natural Reserve	Grassland	11	11D4	2022-06-04	Dominant Vegetation	"38¼52'19""N"	"122¼25'41""W"	658	"Avena barbata, Bromus diandrus"		6.3	Poaceae	Grass
+Bodega Marine Reserve	Coastal Marine	08	08G1	2022-06-06	Grass	"38¼18'55""N"	"123¼04'03""W"	17	"Avena fatua, Bromus diandrus, Briza maxima"		6.13	Poaceae	Grass
+Bodega Marine Reserve	Coastal Marine	08	08G2	2022-06-06	Grass	"38¼18'55""N"	"123¼04'03""W"	17	"Avena fatua, Bromus diandrus, Briza maxima"		4.98	Poaceae	Grass
+Bodega Marine Reserve	Coastal Marine	08	08G3	2022-06-06	Grass	"38¼18'55""N"	"123¼04'03""W"	17	"Avena fatua, Bromus diandrus, Briza maxima"		6.13	Poaceae	Grass
+Bodega Marine Reserve	Coastal Marine	08	08G4	2022-06-06	Grass	"38¼18'55""N"	"123¼04'03""W"	17	"Avena fatua, Bromus diandrus, Briza maxima"		5.87	Poaceae	Grass
+Bodega Marine Reserve	Coastal Marine	08	08D1	2022-06-06	Dominant Vegetation	"38¼19'10""N"	"123¼03'27""W"	5	Lupinus chamissonis		6.3	Fabaceae	Shrub
+Bodega Marine Reserve	Coastal Marine	08	08D2	2022-06-06	Dominant Vegetation	"38¼19'10""N"	"123¼03'27""W"	5	Lupinus chamissonis		6.61	Fabaceae	Shrub
+Bodega Marine Reserve	Coastal Marine	08	08D3	2022-06-06	Dominant Vegetation	"38¼19'10""N"	"123¼03'27""W"	5	Lupinus chamissonis		6.58	Fabaceae	Shrub
+Bodega Marine Reserve	Coastal Marine	08	08D4	2022-06-06	Dominant Vegetation	"38¼19'10""N"	"123¼03'27""W"	5	Lupinus chamissonis		6.94	Fabaceae	Shrub
+White Mountain Research Center	Desert	18	18G1	2022-07-11	Grass	"37¼23'47.09""N"	"118¼18'81.62""W"	1305	Melica californica		4.23	Poaceae	Grass
+White Mountain Research Center	Desert	18	18G2	2022-07-11	Grass	"37¼23'47.09""N"	"118¼18'81.62""W"	1305	Melica californica		4.49	Poaceae	Grass
+White Mountain Research Center	Desert	18	18G3	2022-07-11	Grass	"37¼23'47.09""N"	"118¼18'81.62""W"	1305	Melica californica		4.48	Poaceae	Grass
+White Mountain Research Center	Desert	18	18G4	2022-07-11	Grass	"37¼23'47.09""N"	"118¼18'81.62""W"	1305	Melica californica		5.36	Poaceae	Grass
+White Mountain Research Center	Desert	18	18D1	2022-07-11	Dominant Vegetation	"37¼21'31.67""N"	"118¼19'44.07""W"	1235	Atriplex lentiformis	Saltbrush	7.17	Amaranthaceae	Shrub
+White Mountain Research Center	Desert	18	18D2	2022-07-11	Dominant Vegetation	"37¼21'31.67""N"	"118¼19'44.07""W"	1235	Atriplex lentiformis	Saltbrush	7.32	Amaranthaceae	Shrub
+White Mountain Research Center	Desert	18	18D3	2022-07-11	Dominant Vegetation	"37¼21'31.67""N"	"118¼19'44.07""W"	1235	Atriplex lentiformis	Saltbrush	7.61	Amaranthaceae	Shrub
+White Mountain Research Center	Desert	18	18D4	2022-07-11	Dominant Vegetation	"37¼21'31.67""N"	"118¼19'44.07""W"	1235	Atriplex lentiformis	Saltbrush	7.21	Amaranthaceae	Shrub
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36G1	2022-07-11	Grass	"37¼36'51.41""N"	"118¼49'52.81""W"	2164	Elymus triticoides		4.21	Poaceae	Grass
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36G2	2022-07-11	Grass	"37¼36'51.41""N"	"118¼49'52.81""W"	2164	Elymus triticoides		4.61	Poaceae	Grass
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36G3	2022-07-11	Grass	"37¼36'51.41""N"	"118¼49'52.81""W"	2164	Elymus triticoides		4.22	Poaceae	Grass
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36G4	2022-07-11	Grass	"37¼36'51.41""N"	"118¼49'52.81""W"	2164	Elymus triticoides		4.47	Poaceae	Grass
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36D1	2022-07-11	Dominant Vegetation	"37¼36'43""N"	"118¼49'51""W"	2162	Artemisa tridentata		5.08	Asteraceae	Shrub
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36D2	2022-07-11	Dominant Vegetation	"37¼36'43""N"	"118¼49'51""W"	2162	Artemisa tridentata		6.09	Asteraceae	Shrub
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36D3	2022-07-11	Dominant Vegetation	"37¼36'43""N"	"118¼49'51""W"	2162	Artemisa tridentata		5.6	Asteraceae	Shrub
+Sierra Nevada Aquatic Research Laboratory	Desert	36	36D4	2022-07-11	Dominant Vegetation	"37¼36'43""N"	"118¼49'51""W"	2162	Artemisa tridentata		5.83	Asteraceae	Shrub
+Valentine Camp	Connifer Forest	37	37G1	2022-07-11	Grass	"37¼37'55""N"	"118¼59'40""W"	2461	Calamagrostis stricta		5.22	Poaceae	Grass
+Valentine Camp	Connifer Forest	37	37G2	2022-07-11	Grass	"37¼37'55""N"	"118¼59'40""W"	2461	Calamagrostis stricta		5.14	Poaceae	Grass
+Valentine Camp	Connifer Forest	37	37G3	2022-07-11	Grass	"37¼37'55""N"	"118¼59'40""W"	2461	Calamagrostis stricta		5.5	Poaceae	Grass
+Valentine Camp	Connifer Forest	37	37G4	2022-07-11	Grass	"37¼37'55""N"	"118¼59'40""W"	2461	Calamagrostis stricta		4.77	Poaceae	Grass
+Valentine Camp	Connifer Forest	37	37D1	2022-07-11	Dominant Vegetation	"37¼37'42""N"	"118¼59'37""W"	2461	Pinus jeffreyi		5.96	Pinaceae	Pine
+Valentine Camp	Connifer Forest	37	37D2	2022-07-11	Dominant Vegetation	"37¼37'42""N"	"118¼59'37""W"	2461	Pinus jeffreyi		5.31	Pinaceae	Pine
+Valentine Camp	Connifer Forest	37	37D3	2022-07-11	Dominant Vegetation	"37¼37'42""N"	"118¼59'37""W"	2461	Pinus jeffreyi		5.67	Pinaceae	Pine
+Valentine Camp	Connifer Forest	37	37D4	2022-07-11	Dominant Vegetation	"37¼37'42""N"	"118¼59'37""W"	2461	Pinus jeffreyi		5.38	Pinaceae	Pine
+Yosemite Field Station	Montane	20	20G1	2022-07-12	Grass	"37¼45'34""N"	"119¼48'5.92""W"	1888	"Agrostis capilaris, Holcus lanatus"		5.69	Poaceae	Grass
+Yosemite Field Station	Montane	20	20G2	2022-07-12	Grass	"37¼45'34""N"	"119¼48'5.92""W"	1888	"Agrostis capilaris, Holcus lanatus"		6.08	Poaceae	Grass
+Yosemite Field Station	Montane	20	20G3	2022-07-12	Grass	"37¼45'34""N"	"119¼48'5.92""W"	1888	"Agrostis capilaris, Holcus lanatus"		6.35	Poaceae	Grass
+Yosemite Field Station	Montane	20	20G4	2022-07-12	Grass	"37¼45'34""N"	"119¼48'5.92""W"	1888	"Agrostis capilaris, Holcus lanatus"		6.35	Poaceae	Grass
+Yosemite Field Station	Montane	20	20D1	2022-07-12	Dominant Vegetation	"37¼45'30.63""N"	"119¼47'58.19""W"	1915	"Pinus ponderosa, Piimus jeffreyi"		5.1	Pinaceae	Pine
+Yosemite Field Station	Montane	20	20D2	2022-07-12	Dominant Vegetation	"37¼45'30.63""N"	"119¼47'58.19""W"	1915	"Pinus ponderosa, Piimus jeffreyi"		5.13	Pinaceae	Pine
+Yosemite Field Station	Montane	20	20D3	2022-07-12	Dominant Vegetation	"37¼45'30.63""N"	"119¼47'58.19""W"	1915	"Pinus ponderosa, Piimus jeffreyi"		4.36	Pinaceae	Pine
+Yosemite Field Station	Montane	20	20D4	2022-07-12	Dominant Vegetation	"37¼45'30.63""N"	"119¼47'58.19""W"	1915	"Pinus ponderosa, Piimus jeffreyi"		4.93	Pinaceae	Pine
+Merced Vernal Pools and Grassland Reserve	Grassland	19	19G1	2022-07-13	Grass	"37¼21'34.35""N"	"120¼23'47.72""W"	83	"Bromus hordeaceus, Avena barbata, Bromus madritensis"		4.77	Poaceae	Grass
+Merced Vernal Pools and Grassland Reserve	Grassland	19	19G2	2022-07-13	Grass	"37¼21'34.35""N"	"120¼23'47.72""W"	83	"Bromus hordeaceus, Avena barbata, Bromus madritensis"		4.71	Poaceae	Grass
+Merced Vernal Pools and Grassland Reserve	Grassland	19	19G3	2022-07-13	Grass	"37¼21'34.35""N"	"120¼23'47.72""W"	83	"Bromus hordeaceus, Avena barbata, Bromus madritensis"		4.56	Poaceae	Grass
+Merced Vernal Pools and Grassland Reserve	Grassland	19	19G4	2022-07-13	Grass	"37¼21'34.35""N"	"120¼23'47.72""W"	83	"Bromus hordeaceus, Avena barbata, Bromus madritensis"		4.97	Poaceae	Grass

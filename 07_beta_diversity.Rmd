@@ -1,0 +1,222 @@
+---
+title: "07 — Beta Diversity"
+output: html_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 10000, digits = 12)
+set.seed(711)
+```
+
+```{r load-packages, message=FALSE, warning=FALSE}
+library(here)
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+library(EcolUtils)
+library(ggpubr)
+library(ggrepel)
+```
+
+```{r load-globals, message=FALSE, warning=FALSE}
+source(here::here("R/colors_themes.R"))
+source(here::here("R/rf_functions.R"))
+source(here::here("R/utils.R"))
+```
+
+```{r load-rds, message=FALSE, warning=FALSE}
+mg                   <- readRDS(here::here("results/rds/mg.rds"))
+mg_rar               <- readRDS(here::here("results/rds/mg_rar.rds"))
+mgB4rar              <- readRDS(here::here("results/rds/mgB4rar.rds"))
+metadata             <- readRDS(here::here("results/rds/metadata_final.rds"))
+clade_colors         <- readRDS(here::here("results/rds/clade_colors.rds"))
+color_mapping_vector <- readRDS(here::here("results/rds/color_mapping_vector.rds"))
+```
+
+#### Beta Diversity
+
+##### NMDS
+
+```{r beta-div, echo=FALSE, fig.height=20, fig.width=25, message=FALSE, warning=FALSE, include=FALSE, results='hold'}
+set.seed(711)
+
+mg_distmat <- avgdist(curto_unrar_otutab, sample = 1945, upper = F)
+
+mg_NMS <- metaMDS(mg_distmat, distance = "bray", k = 2,
+                  maxit = 999, trymax = 500, wascores = TRUE)
+
+curto_nmds_df <- as.data.frame(mg_NMS$points[, c(1, 2)]) %>%
+  merge(., mg_rar@sam_data, by = 'row.names', all.x = T)
+
+mg_NMS$stress
+
+curto_nmds_plot <- ggplot() +
+  geom_point(data = curto_nmds_df,
+             aes(x = MDS1, y = MDS2, color = reserve_code, shape = Litter_type),
+             size = 7, alpha = 0.75, show.legend = TRUE) +
+  facet_wrap(reserve_code ~ ., scales = "fixed", ncol = 4) +
+  scale_color_manual(values = color_mapping_vector, name = "Reserves") +
+  ggtitle("Only Curtos NMDS faceted by Reserve") +
+  theme_bw() +
+  theme(text = element_text(size = 22), panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), legend.position = "top")
+
+litter_type_permanova <- adonis2(mg_distmat ~ Litter_type,
+                                 data = curto_nmds_df |>
+                                   column_to_rownames("Row.names") |>
+                                   dplyr::select(Litter_type),
+                                 permutations = 999)
+
+curto_nmds_plot_ST <- ggplot() +
+  geom_point(data = curto_nmds_df,
+             aes(x = MDS1, y = MDS2, color = Litter_type, shape = Litter_type),
+             size = 5, alpha = 0.75, show.legend = TRUE) +
+  annotate("text", x = 0.28, y = -0.2,
+           label = paste("Stress =", round(mg_NMS$stress, digits = 2)), size = 3) +
+  annotate("text", x = -0.06, y = -0.2,
+           label = paste("PERMANOVA ~ litter type\nF =",
+                         round(litter_type_permanova$F[1], digits = 2),
+                         ", P =", round(litter_type_permanova$`Pr(>F)`[1], digits = 3)), size = 3) +
+  guides(color = guide_legend(title = "Litter type"),
+         shape = guide_legend(title = "Litter type")) +
+  apatheme
+curto_nmds_plot_ST
+
+ggsave(here::here("plots/NMDSs/curto_nmds_ST.png"),
+       width = 120, height = 80, units = "mm", dpi = 300)
+
+# Subclade-level NMDS
+mg_subclades <- tax_glom(mgB4rar, taxrank = "subclade")
+curto_subclades_unrar_otutab <- as.data.frame(t(mg_subclades@otu_table))
+
+mg_subclds_distmat <- avgdist(curto_subclades_unrar_otutab, sample = 1900, upper = F)
+mg_subclds_NMS <- metaMDS(mg_subclds_distmat, distance = "bray", k = 2,
+                           maxit = 999, trymax = 500, wascores = TRUE)
+goodness(mg_subclds_NMS); stressplot(mg_subclds_NMS)
+
+subclds_nmds_df <- as.data.frame(mg_subclds_NMS$points[, c(1, 2)]) %>%
+  merge(., mg_subclades@sam_data, by = 'row.names', all.x = T)
+
+subclade_litter_type_permanova <- adonis2(mg_subclds_distmat ~ Plant_type,
+                                          data = subclds_nmds_df |>
+                                            column_to_rownames("Row.names") |>
+                                            dplyr::select(Plant_type, reserve_code),
+                                          permutations = 999)
+subclade_litter_type_permanova
+
+subclades_PERMANOVA_PRIMER <- read.table(
+  here::here("PERMANOVA_subclades_PlantTypeByReserve_VarEstimates.txt"),
+  header = T, sep = "\t") |>
+  mutate(percent = Estimate / sum(Estimate))
+
+subclds_nmds_plot_ST <- ggplot() +
+  geom_point(data = subclds_nmds_df,
+             aes(x = MDS1, y = MDS2, color = Ecosystem, shape = Plant_type),
+             size = 5, alpha = 0.75, show.legend = TRUE) +
+  annotate("text", x = 0.28, y = -0.2,
+           label = paste("Stress =", round(mg_subclds_NMS$stress, digits = 2)), size = 3) +
+  annotate("text", x = -0.06, y = -0.2,
+           label = paste("PERMANOVA ~ litter type\nF =",
+                         round(subclade_litter_type_permanova$F[1], digits = 2),
+                         ", P =", round(subclade_litter_type_permanova$`Pr(>F)`[1], digits = 3)),
+           size = 3) +
+  scale_color_manual(values = ecosystem_colors, name = "Reserves") +
+  guides(shape = guide_legend(title = "Litter type")) +
+  apatheme
+print(subclds_nmds_plot_ST)
+ggsave(here::here("plots/NMDSs/subclades_nmds_litter_type.png"),
+       width = 160, height = 120, units = "mm", dpi = 300)
+
+# Grass-only subclade NMDS
+mg_subclades_grass_only <- subset_samples(mg_subclades, Litter_type == "G")
+curto_subclades_grassonly_unrar_otutab <- as.data.frame(t(mg_subclades_grass_only@otu_table))
+mg_subclds_grass_distmat <- avgdist(curto_subclades_grassonly_unrar_otutab, sample = 1900, upper = F)
+mg_subclds_grass_NMS <- metaMDS(mg_subclds_grass_distmat, distance = "bray", k = 2,
+                                 maxit = 999, trymax = 500, wascores = TRUE)
+goodness(mg_subclds_grass_NMS); stressplot(mg_subclds_grass_NMS)
+
+subclds_grass_nmds_df <- as.data.frame(mg_subclds_grass_NMS$points[, c(1, 2)]) %>%
+  merge(., mg_subclades_grass_only@sam_data, by = 'row.names', all.x = T)
+
+subclds_nmds_plot_grass <- ggplot() +
+  geom_point(data = subclds_grass_nmds_df,
+             aes(x = MDS1, y = MDS2, color = Ecosystem),
+             size = 10, alpha = 0.75, show.legend = TRUE) +
+  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
+  ggtitle("Subclade level Curtos NMDS only Grass litter samples") +
+  theme_bw() +
+  theme(text = element_text(size = 22), panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), legend.position = "bottom")
+print(subclds_nmds_plot_grass)
+
+# Clade-level NMDS
+mg_clades <- tax_glom(mgB4rar, taxrank = "clade")
+curto_clades_unrar_otutab <- as.data.frame(t(mg_clades@otu_table))
+mg_clds_distmat <- avgdist(curto_clades_unrar_otutab, sample = 1945, upper = F)
+mg_clds_NMS <- metaMDS(mg_clds_distmat, distance = "bray", k = 3,
+                        maxit = 999, trymax = 500, wascores = TRUE)
+goodness(mg_clds_NMS); stressplot(mg_clds_NMS)
+
+clds_nmds_df <- as.data.frame(mg_clds_NMS$points[, c(1, 2)]) %>%
+  merge(., mg_clades@sam_data, by = 'row.names', all.x = T)
+
+clade_litter_type_permanova <- adonis2(mg_clds_distmat ~ Plant_type,
+                                       data = clds_nmds_df |>
+                                         column_to_rownames("Row.names") |>
+                                         dplyr::select(Plant_type),
+                                       permutations = 999)
+clade_litter_type_permanova
+
+clds_nmds_plot_ST <- ggplot() +
+  geom_point(data = clds_nmds_df,
+             aes(x = MDS1, y = MDS2, color = Plant_type),
+             size = 5, alpha = 0.75, show.legend = TRUE) +
+  annotate("text", x = 0.28, y = -0.2,
+           label = paste("Stress =", round(mg_clds_NMS$stress, digits = 2)), size = 3) +
+  annotate("text", x = -0.06, y = -0.2,
+           label = paste("PERMANOVA ~ litter type\nF =",
+                         round(clade_litter_type_permanova$F[1], digits = 2),
+                         ", P =", round(clade_litter_type_permanova$`Pr(>F)`[1], digits = 3)),
+           size = 3) +
+  guides(color = guide_legend(title = "Litter type"),
+         shape = guide_legend(title = "Litter type")) +
+  apatheme
+print(clds_nmds_plot_ST)
+ggsave(here::here("plots/NMDSs/clades_nmds_litter_type.png"),
+       width = 120, height = 80, units = "mm", dpi = 300)
+```
+
+```{r beta-div-plots, fig.width=30, fig.height=40, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
+print(curto_nmds_plot)
+print(curto_nmds_plot_ST)
+print(subclds_nmds_plot_ST)
+print(clds_nmds_plot_ST)
+print(subclds_nmds_plot_grass)
+ggsave(here::here("plots/NMDSs/curto_nmds_clades_grass_samples_color_by_reserve.png"),
+       width = 35, height = 35, units = "cm", dpi = 320)
+```
+
+```{r beta-div-matrix-4-primer, message=FALSE, warning=FALSE, results='hold', echo=FALSE, include=FALSE}
+# Export of Bray-Curtis distance matrices for PRIMER is intentionally disabled.
+# Run manually if needed:
+# write.csv(as.data.frame(as.matrix(mg_distmat)), here::here("bray_matrix.csv"))
+# write.csv(t(curto_nmds_df %>% column_to_rownames("Row.names") %>% dplyr::select(!c(MDS1, MDS2))),
+#           here::here("bray_metadata.csv"), quote = FALSE, row.names = T)
+```
+
+```{r save-rds, include=FALSE}
+saveRDS(mg_distmat, here::here("results/rds/mg_distmat.rds"))
+saveRDS(curto_nmds_df, here::here("results/rds/curto_nmds_df.rds"))
+saveRDS(curto_unrar_otutab, here::here("results/rds/curto_unrar_otutab.rds"))
+saveRDS(mg_subclades, here::here("results/rds/mg_subclades.rds"))
+saveRDS(mg_clades, here::here("results/rds/mg_clades.rds"))
+saveRDS(mg_subclds_distmat, here::here("results/rds/mg_subclds_distmat.rds"))
+saveRDS(subclds_nmds_df, here::here("results/rds/subclds_nmds_df.rds"))
+saveRDS(mg_clds_distmat, here::here("results/rds/mg_clds_distmat.rds"))
+saveRDS(clds_nmds_df, here::here("results/rds/clds_nmds_df.rds"))
+saveRDS(curto_subclades_unrar_otutab, here::here("results/rds/curto_subclades_unrar_otutab.rds"))
+saveRDS(curto_clades_unrar_otutab,    here::here("results/rds/curto_clades_unrar_otutab.rds"))
+```

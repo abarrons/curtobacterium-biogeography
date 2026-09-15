@@ -1,0 +1,5 @@
+Source	Estimate	Sq.root
+V(reserve_code)	0.44088	0.66398
+V(Plant_type)	3.9732	1.9933
+V(reserve_codexPlant_type)	2.7129	1.6471
+V(Res)	0.95724	0.97839
