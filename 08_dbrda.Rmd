@@ -58,7 +58,6 @@ color_mapping_vector <- readRDS(here::here("results/rds/color_mapping_vector.rds
 
 ```{r dbRDA, fig.width=30, fig.height=25, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
 #preparing data for dbRDA analysis
-#colnames(curto_nmds_df)<-sub("X.", "", colnames(curto_nmds_df))
 
 #metadata for analysis and plots
 md4dbrda <- curto_nmds_df %>% column_to_rownames("Row.names") %>% 
@@ -73,7 +72,6 @@ geog.stand <- md4dbrda %>%
 #adding transformed coordinates to metadata
 md4dbrda <- md4dbrda %>%  
   dplyr::select(-c(plot_cordsX, plot_cordsY, Elevation)) %>%
-  #merge(., geog.stand, by = "row.names") %>%
   merge(., pcadf_expanded |> dplyr::select(-SiteID),
         by.x = "row.names", by.y = "SampleID") %>%
   dplyr::rename(PC1.clim = PC1,
@@ -224,8 +222,6 @@ ggsave(here::here("plots/dBRDA/curto_dbrda_prop_plot.png"),
        height = width*0.65,
        units = "mm",
        dpi = 300)
-
-
 
 
 # dbRDA with climate PCAs and litter variables #####
@@ -481,36 +477,7 @@ curto_dbRDA_geog <- dbrda(mg_distmat ~ plot_cordsX + plot_cordsY + Elevation, da
 
 
 curto_dbRDA_geog_summary <- summary(curto_dbRDA_geog)
-#curto_dbRDA_geog_summary
 
-#plot(curto_dbRDA_geog)
-
-
-curto_dbRDA_geog_plot_df <- cbind(scores(curto_dbRDA_geog)$sites, md4dbrda)
-dbRDA_geog_loadings <- data.frame(Variables = rownames(curto_dbRDA_geog$CCA$biplot), curto_dbRDA_geog$CCA$biplot)
-
-dbRDA_geog_plot<-ggplot(curto_dbRDA_geog_plot_df
-                 , aes(dbRDA1, dbRDA2)) +
-  geom_point(data = curto_dbRDA_geog_plot_df, aes(color = reserve_code, shape = Litter_type),  size = 10, alpha = 0.75) +
-  geom_text(data = curto_dbRDA_geog_plot_df, aes(x=dbRDA1, y=dbRDA2-0.025, label=row.names(curto_dbRDA_plot_df)), size=2.75) +
-  scale_color_manual(values = color_mapping_vector, name="Reserves") +
-  geom_segment(data = dbRDA_geog_loadings,
-               aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2),
-               arrow = arrow(length = unit(0.3, "cm")),
-               colour="grey", inherit.aes = FALSE) +
- geom_text(data=dbRDA_geog_loadings,
-           aes(x=dbRDA1*1.1, y=dbRDA2*1.1, label=Variables),
-           size=6,
-           colour = "darkblue") +
-  ggtitle("dbRDA, Rar. depth: 1000. Geographic coordintas and elevation") +
- #annotate("text", x = -7.5 , y = -6, label = "Stress = 0.1", size = 3.5) +
- #annotate("text", x = -7.5, y = -6.5, label = "[PERMANOVA ~ Site: F = 3.28, P < 0.001]", size = 3.5) +
-  xlab("dbRDA1 (4.8%)") +
-  ylab("dbRDA2 (4.2%)") +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        text = element_text(size = 22))
-dbRDA_geog_plot
 
 ```
 
@@ -525,151 +492,7 @@ dbRDA_geog_plot
 #write.csv(t(md4dbrda %>% column_to_rownames("Row.names")), here::here("dbRDA_metadata.csv"), quote = FALSE, row.names = T)
 ```
 
-###### Using AIC method to select the best model variables for dbRDA at the strain level
 
-```{r dbRDA after DistLM, fig.width=30, fig.height=25, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
-# using AIC method to select the best model variables
-curto_dbRDA_AIC <- dbrda(mg_distmat ~  MAT + T.Iso + T.DryQ + T.MinColdMo + MAP + P.Seas + T.Diurn + P.WarmQ + P.DryMo + pH + crude_protein + cellulose + hemicellulose + lignin,
-                     data = md4dbrda, distance = "bray", na.action = na.exclude)
-
-print(curto_dbRDA_AIC)
-
-curto_dbRDA_AIC_summary <- summary(curto_dbRDA_AIC)
-curto_dbRDA_AIC_summary
-
-#plot(curto_dbRDA_AIC)
-
-k <- curto_dbRDA_AIC$CCA$rank
-
-curto_dbRDA_AIC_plot_df <- cbind(scores(curto_dbRDA_AIC,
-                                        display = "sites",
-                                        scaling = 2,
-                                        choices = 1:2),
-                                 md4dbrda)
-dbRDA_loadings_AIC <- data.frame(Variables = rownames(curto_dbRDA_AIC$CCA$biplot), curto_dbRDA_AIC$CCA$biplot)
-dbRDA_loadings_AIC <- dbRDA_loadings_AIC %>% mutate(Variables = gsub("\\.", " ", Variables))
-
-dbRDA_AIC_plot<-ggplot(curto_dbRDA_AIC_plot_df
-                 , aes(dbRDA1, dbRDA2)) +
-  geom_point(data = curto_dbRDA_AIC_plot_df, aes(color = Ecosystem, shape = Litter_type),  size = 10, alpha = 0.75) +
-  #geom_text(data = curto_dbRDA_AIC_plot_df, aes(x=dbRDA1, y=dbRDA2-0.025, label=row.names(curto_dbRDA_AIC_plot_df)), size=4.75) +
-  #scale_color_manual(values = color_mapping_vector, name="Reserves") +
-  geom_segment(data = dbRDA_loadings_AIC,
-               aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2),
-               arrow = arrow(length = unit(0.3, "cm")),
-               colour="grey", inherit.aes = FALSE) +
- geom_text(data=dbRDA_loadings_AIC,
-           aes(x=dbRDA1*1.1, y=dbRDA2*1.1, label=Variables),
-           size=8,
-           colour = "darkblue") +
-  #ggtitle("dbRDA, Rar. depth: 1000. AIC best model vars") +
- #annotate("text", x = -7.5 , y = -6, label = "Stress = 0.1", size = 3.5) +
- #annotate("text", x = -7.5, y = -6.5, label = "[PERMANOVA ~ Site: F = 3.28, P < 0.001]", size = 3.5) +
-  labs(shape = "Litter type") +
-  xlab("dbRDA1 (39.17% of constrained variance, 12.97% of total)") +
-  ylab("dbRDA2 (16.44% of constrained variance, 5.44% of total)") +
-  scale_shape(labels = c("Dominant Vegetation", "Grass")) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        text = element_text(size = 28),
-        legend.position = "right", legend.direction = "vertical")
-dbRDA_AIC_plot
-
-ggsave(here::here("plots/dBRDA/OTU_dbRDA_after_DistLM.png"),
-       width = 40,
-       height = 45,
-       units = "cm",
-       dpi = 320)
-
-
-curto_dbRDA_AIC_entroids_plot_df <- curto_dbRDA_AIC_plot_df %>%
-  dplyr::group_by(reserve_litter) %>% 
-  dplyr::summarise(meandbRDA1 = mean(dbRDA1),
-            meandbRDA2 = mean(dbRDA2),
-            SDdbRDA1 = sd(dbRDA1),
-            SDdbRDA2 = sd(dbRDA2),
-            SEdbRDA1 = sd(dbRDA1) / sqrt(n()),
-            SEdbRDA2 = sd(dbRDA2) / sqrt(n())) %>% 
-  merge(., md4dbrda, by = "reserve_litter", all.y = T) %>%
-  distinct(reserve_litter, .keep_all = T)
-
-
-dbRDA_AIC_centroids_plot<-ggplot(curto_dbRDA_AIC_entroids_plot_df
-                 , aes(meandbRDA1, meandbRDA2)) +
-  geom_point(data = curto_dbRDA_AIC_entroids_plot_df, aes(color = Ecosystem, shape = Litter_type),  size = 8, alpha = 0.75) +
-  geom_errorbar(aes(ymin = meandbRDA2 - SEdbRDA2, ymax = meandbRDA2 + SEdbRDA2, color = Ecosystem), width = 0.025, alpha = 0.25) +
-  geom_errorbarh(aes(xmin = meandbRDA1 - SEdbRDA1, xmax = meandbRDA1 + SEdbRDA1, color = Ecosystem), height = 0.025, alpha = 0.25) +
-  #geom_text(data = curto_dbRDA_AIC_entroids_plot_df, aes(x=meandbRDA1, y=meandbRDA2-0.1, label=reserve_litter, color = Ecosystem), size=4.75) +
-  #scale_color_manual(values = color_mapping_vector, name="Reserves") +
-  geom_segment(data = dbRDA_loadings_AIC,
-               aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2),
-               arrow = arrow(length = unit(0.3, "cm")),
-               colour="grey", inherit.aes = FALSE) +
- geom_text(data=dbRDA_loadings_AIC,
-           aes(x=dbRDA1*1.1, y=dbRDA2*1.1, label=Variables),
-           size=8,
-           colour = "darkblue") +
-  ggtitle("dbRDA, Rar. depth: 1000. AIC best model vars") +
- #annotate("text", x = -7.5 , y = -6, label = "Stress = 0.1", size = 3.5) +
- #annotate("text", x = -7.5, y = -6.5, label = "[PERMANOVA ~ Site: F = 3.28, P < 0.001]", size = 3.5) +
-  labs(shape = "Litter type") +
-  xlab("dbRDA1 (39.17% of constrained variance, 12.97% of total)") +
-  ylab("dbRDA2 (16.44% of constrained variance, 5.44% of total)") +
-  scale_shape(labels = c("Dominant Vegetation", "Grass")) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        text = element_text(size = 24),
-        legend.position = "bottom")
-dbRDA_AIC_centroids_plot
-
-ggsave(here::here("plots/dBRDA/OTU_dbRDA_after_DistLM_centroids.png"),
-       width = 50,
-       height = 40,
-       units = "cm",
-       dpi = 320)
-
-
-  
-
-# using BIC method to select the best model variables
-curto_dbRDA_BIC <- dbrda(mg_distmat ~ MAT + T.DryQ + P.Seas
-                         + pH + crude_protein + cellulose + hemicellulose + lignin
-                         ,
-                     data = md4dbrda, distance = "bray", na.action = na.exclude)
-
-print(curto_dbRDA_BIC)
-
-curto_dbRDA_BIC_summary <- summary(curto_dbRDA_BIC)
-curto_dbRDA_BIC_summary
-
-#plot(curto_dbRDA_BIC)
-
-curto_dbRDA_BIC_plot_df <- cbind(scores(curto_dbRDA_BIC)$sites, md4dbrda)
-dbRDA_loadings_BIC <- data.frame(Variables = rownames(curto_dbRDA_BIC$CCA$biplot), curto_dbRDA_BIC$CCA$biplot)
-
-dbRDA_BIC_plot<-ggplot(curto_dbRDA_BIC_plot_df
-                 , aes(dbRDA1, dbRDA2)) +
-  geom_point(data = curto_dbRDA_BIC_plot_df, aes(color = Ecosystem, shape = Litter_type),  size = 10, alpha = 0.75) +
-  #geom_text(data = curto_dbRDA_BIC_plot_df, aes(x=dbRDA1, y=dbRDA2-0.025, label=row.names(curto_dbRDA_BIC_plot_df)), size=4.75) +
-  #scale_color_manual(values = color_mapping_vector, name="Reserves") +
-  geom_segment(data = dbRDA_loadings_BIC,
-               aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2),
-               #arrow = arrow(length = unit(0.3, "cm")),
-               colour="grey", inherit.aes = FALSE) +
- geom_text(data=dbRDA_loadings_BIC,
-           aes(x=dbRDA1*1.1, y=dbRDA2*1.1, label=Variables),
-           size=6,
-           colour = "darkblue") +
-  ggtitle("dbRDA, Rar. depth: 1000. BIC best model vars") +
- #annotate("text", x = -7.5 , y = -6, label = "Stress = 0.1", size = 3.5) +
- #annotate("text", x = -7.5, y = -6.5, label = "[PERMANOVA ~ Site: F = 3.28, P < 0.001]", size = 3.5) +
-  xlab("dbRDA1 (5.8%)") +
-  ylab("dbRDA2 (3.9%)") +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        text = element_text(size = 22))
-dbRDA_BIC_plot
-```
 
 ###### dbRDA clade & subclade
 
@@ -679,18 +502,10 @@ dbRDA_BIC_plot
 #### clades ####
 
 #preparing data for dbRDA analysis
-#colnames(clds_nmds_df)<-sub("X.", "", colnames(clds_nmds_df))
 #metadata for analysis and plots
 md4dbrda_clades <- clds_nmds_df %>% column_to_rownames("Row.names") %>% 
   dplyr::select(3:41)
 
-#transform coordinates into a range from 0-1
-#geog.stand <- md4dbrda %>%
-#  dplyr::select(c(plot_cordsX, plot_cordsY, Elevation)) %>%
-#  decostand("range")
-
-#adding transformed coordinates to metadata
-#md4dbrda_clades <- md4dbrda_clades %>% dplyr::select(-c(plot_cordsX, plot_cordsY, Elevation)) %>% merge(., geog.stand, by = "row.names")
  
 # dbRDA with variable reduction by correlation
 clades_dbRDA <- dbrda(mg_clds_distmat ~  MAT +
@@ -879,11 +694,6 @@ clades_sp_vectors_plot <- ggplot() +
     plot.margin = ggplot2::margin(0, 0, 0, 0, unit = "cm")  # Removes outer margins
   )
 
-#dbRDA_clades_plot <- dbRDA_clades_plot +
-#  annotation_custom(ggplotGrob(clades_sp_vectors_plot), xmin = -1, xmax = 0, ymin = -3.1, ymax = -1.1) #+
-  #annotation_custom(ggplotGrob(clades_var_vectors_plot), xmin = 0.4, xmax = 2, ymin = -2, ymax = -0.8)
-#clades_sp_vectors_plot
-
 
 ggarrange(dbRDA_clades_plot, dbrda_clades_contributions_plot, nrow = 1, widths = c(1, 0.5))
 
@@ -1067,11 +877,6 @@ clades_sp_vectors_plot_PCA_clim_litt_vars <- ggplot() +
     plot.margin = ggplot2::margin(0, 0, 0, 0, unit = "cm")  # Removes outer margins
   )
 
-#dbRDA_clades_plot_PCA_clim_litt_vars <- dbRDA_clades_plot_PCA_clim_litt_vars +
-#  annotation_custom(ggplotGrob(clades_sp_vectors_plot_PCA_clim_litt_vars), xmin = 0, xmax = 1, ymin = -2, ymax = -4) #+
-  #annotation_custom(ggplotGrob(clades_var_vectors_plot), xmin = 0.4, xmax = 2, ymin = -2, ymax = -0.8)
-#clades_sp_vectors_plot
-
 
 ggarrange(dbRDA_clades_plot_PCA_clim_litt_vars, dbrda_clades_contributions_plot_PCA_clim_litt_vars,
           nrow = 1, widths = c(1, 0.5),
@@ -1084,8 +889,6 @@ ggsave(here::here("plots/dBRDA/clades_dbRDA_PCA_clim_litt_vars.png"),
        height = width*0.65,
        units = "mm",
        dpi = 300)
-
-
 
 
 ## dbRDA clade level with climate and litter PCs ####
@@ -1165,12 +968,8 @@ clds_colors_4plot <- clade_colors[row.names(dbRDA_species_clades_PCA_clim_litt)]
 dbRDA_clades_plot_PCA_clim_litt <- ggplot(clades_dbRDA_plot_df_PCA_clim_litt
                  , aes(dbRDA1, dbRDA2)) +
   geom_point(data = clades_dbRDA_plot_df_PCA_clim_litt, aes(color = Ecosystem, shape = Litter_type),  size = 10, alpha = 0.75) +
-  #geom_text(data = clades_dbRDA_plot_df, aes(x=dbRDA1, y=dbRDA2-0.025, label=row.names(clades_dbRDA_plot_df)), size=4.75) +
-  #scale_color_manual(values = color_mapping_vector, name="Reserves") +
-  #facet_wrap(~Litter_type, scales = "fixed") +
   geom_segment(data = dbRDA_loadings_clades_PCA_clim_litt,
                aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2),
-               #arrow = arrow(length = unit(0.3, "cm")),
                colour="grey", inherit.aes = FALSE) +
   geom_label(data=dbRDA_loadings_clades_PCA_clim_litt,
            aes(x=dbRDA1*1.1, y=dbRDA2*1.1, label=gsub("\\.", " ", dbRDA_loadings_clades_PCA_clim_litt$Variables)),
@@ -1181,7 +980,6 @@ dbRDA_clades_plot_PCA_clim_litt <- ggplot(clades_dbRDA_plot_df_PCA_clim_litt
     label.size = 0.25) +
   guides(color = guide_legend(title.position = "top"),
          shape = guide_legend(title.position = "top", title = "Litter type")) +
-  #ggtitle("dbRDA Clade level, Rar. depth: 1000. Reduction of variables by correlation") +
   xlab("dbRDA1 (83.13% of constrained, 17.52% total)") +
   ylab("dbRDA2 (10.22% of constrained, 2.15% total)") +
   theme_bw() +
@@ -1228,8 +1026,6 @@ clades_sp_vectors_plot_PCA_clim_litt <- ggplot() +
 
 dbRDA_clades_plot_PCA_clim_litt <- dbRDA_clades_plot_PCA_clim_litt +
   annotation_custom(ggplotGrob(clades_sp_vectors_plot_PCA_clim_litt), xmin = -1, xmax = 0, ymin = -1, ymax = -3) #+
-  #annotation_custom(ggplotGrob(clades_var_vectors_plot), xmin = 0.4, xmax = 2, ymin = -2, ymax = -0.8)
-#clades_sp_vectors_plot
 
 
 ggarrange(dbRDA_clades_plot_PCA_clim_litt, dbrda_clades_contributions_plot_PCA_clim_litt, nrow = 1, widths = c(1, 0.5))
@@ -1353,12 +1149,7 @@ row.names(dbRDA_species_subclades) <- tax[, "subclade"][match(row.names(dbRDA_sp
 subclds_colors_4plot <- subclade_colros[row.names(dbRDA_species_subclades)]
 
 #ggplot
-dbRDA_subclades_plot<-ggplot(#subclades_dbRDA_plot_df
-                 #, aes(dbRDA1, dbRDA2)
-                 ) +
-  #geom_point(data = subclades_dbRDA_plot_df, aes(color = Ecosystem, shape = Litter_type),  size = 10, alpha = 0.75) +
-  #geom_text(data = subclades_dbRDA_plot_df, aes(x=dbRDA1, y=dbRDA2-0.025, label=row.names(subclades_dbRDA_plot_df)), size=4.75) +
-  #scale_color_manual(values = color_mapping_vector, name="Reserves") +
+dbRDA_subclades_plot<-ggplot() +
   geom_segment(data = dbRDA_species_subclades,
                aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2,),
                #arrow = arrow(length = unit(0.3, "cm")),
@@ -1381,8 +1172,6 @@ dbRDA_subclades_plot<-ggplot(#subclades_dbRDA_plot_df
            #fill = "white", # Optional: Background fill color for the label
     label.padding = unit(0.2, "lines"), # Padding around the text
     label.size = 0.25) +
-  #scale_shape(name = "Litter Type", labels = c("Dominant Vegetation", "Grass")) +
-  #ggtitle("dbRDA Subclade level, Rar. depth: 1000. Reduction of variables by correlation") +
   xlab("dbRDA1 (38.15% of constrained, 12.63% of total)") +
   ylab("dbRDA2 (24.06% of constrained, 7.96% of total)") +
   guides(color = guide_legend(title.position = "top"),
@@ -1412,8 +1201,7 @@ subclades_sp_vectors_plot <- ggplot() +
     plot.margin = ggplot2::margin(0, 0, 0, 0, unit = "cm")  # Removes outer margins
   )
 
-#dbRDA_subclades_plot <- dbRDA_subclades_plot +
-#  annotation_custom(ggplotGrob(subclades_sp_vectors_plot), xmin = -0.9, xmax = 0, ymin = -2.2, ymax = -1.1)
+
 
 ggarrange(dbRDA_subclades_plot, dbrda_subclades_contributions_plot, nrow = 1, widths = c(1, 0.5))
 
@@ -1586,18 +1374,12 @@ subclds_colors_4plot <- subclade_colros[row.names(dbRDA_species_subclades_PCA_cl
 
 
 #ggplot
-dbRDA_subclades_plot_PCA_clim_litt_vars <- ggplot(subclades_dbRDA_plot_df_PCA_clim_litt_vars
-                 , aes(dbRDA1, dbRDA2)
-  ) +
+dbRDA_subclades_plot_PCA_clim_litt_vars <- ggplot(subclades_dbRDA_plot_df_PCA_clim_litt_vars,
+                                                  aes(dbRDA1, dbRDA2)) +
   geom_point(data = subclades_dbRDA_plot_df_PCA_clim_litt_vars,
-             aes(#color = Ecosystem,
-                 shape = Plant_type),  size = 5, alpha = 0.65) +
-  #geom_text(data = clades_dbRDA_plot_df, aes(x=dbRDA1, y=dbRDA2-0.025, label=row.names(clades_dbRDA_plot_df)), size=4.75) +
-  #scale_color_manual(values = ecosystem_colors, name="Ecosystem") +
-  #facet_wrap(~Litter_type, scales = "fixed") +
+             aes(shape = Plant_type),  size = 5, alpha = 0.65) +
   geom_segment(data = dbRDA_species_subclades_PCA_clim_litt_vars,
                aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2,),
-               #arrow = arrow(length = unit(0.3, "cm")),
                colour=subclds_colors_4plot, inherit.aes = FALSE,
                linewidth = 1.5) +
  geom_text_repel(data=dbRDA_species_subclades_PCA_clim_litt_vars,
@@ -1607,21 +1389,14 @@ dbRDA_subclades_plot_PCA_clim_litt_vars <- ggplot(subclades_dbRDA_plot_df_PCA_cl
            fontface = "bold") +
   geom_segment(data = dbRDA_loadings_subclades_PCA_clim_litt_vars,
                aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2),
-               #arrow = arrow(length = unit(0.3, "cm")),
                colour="grey", linewidth = 1.5, inherit.aes = FALSE) +
   geom_text_repel(data=dbRDA_loadings_subclades_PCA_clim_litt_vars,
            aes(x=dbRDA1*1.1, y=dbRDA2*1.1, label=gsub("[._]", " ", dbRDA_loadings_subclades_PCA_clim_litt_vars$Variables)),
            size=5,
            colour = "darkblue",
-           fontface = "bold"
-           #alpha = 0.75,
-           #fill = "white", # Optional: Background fill color for the label
-    #label.padding = unit(0.2, "lines"), # Padding around the text
-    #label.size = 0.25
-    ) +
+           fontface = "bold") +
   guides(color = guide_legend(title.position = "top"),
          shape = guide_legend(title.position = "top", title = "Litter type")) +
-  #ggtitle("dbRDA Clade level, Rar. depth: 1000. Reduction of variables by correlation") +
   xlab("dbRDA1 (67.87% of constrained, 19.33% total)") +
   ylab("dbRDA2 (11.5% of constrained, 3.27% total)") +
   apatheme +
@@ -1657,7 +1432,6 @@ subclades_var_vectors_plot <- ggplot() +
 subclades_sp_vectors_plot_PCA_clim_litt_vars <- ggplot() +
   geom_segment(data = dbRDA_species_subclades_PCA_clim_litt_vars,
                aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2,),
-               #arrow = arrow(length = unit(0.3, "cm")),
                colour=subclds_colors_4plot, inherit.aes = FALSE,
                linewidth = 1.5) +
  geom_text(data=dbRDA_species_subclades_PCA_clim_litt_vars,
@@ -1671,12 +1445,6 @@ subclades_sp_vectors_plot_PCA_clim_litt_vars <- ggplot() +
     panel.grid = element_blank(),  # Ensures no gridlines
     plot.margin = ggplot2::margin(0, 0, 0, 0, unit = "cm")  # Removes outer margins
   )
-
-#dbRDA_subclades_plot_PCA_clim_litt_vars <- dbRDA_subclades_plot_PCA_clim_litt_vars +
-#  annotation_custom(ggplotGrob(subclades_sp_vectors_plot_PCA_clim_litt_vars), xmin = -1.8, xmax = -0.8, ymin = -0.7, ymax = -2.7) #+
-  #annotation_custom(ggplotGrob(clades_var_vectors_plot), xmin = 0.4, xmax = 2, ymin = -2, ymax = -0.8)
-#clades_sp_vectors_plot
-
 
 ggarrange(dbRDA_subclades_plot_PCA_clim_litt_vars, dbrda_subclades_contributions_plot_PCA_clim_litt_vars,
           nrow = 1,
@@ -1832,23 +1600,17 @@ subclds_colors_4plot <- subclade_colros[row.names(dbRDA_species_subclades_PCA_cl
 dbRDA_subclades_plot_PCA_clim_litt <- ggplot(subclades_dbRDA_plot_df_PCA_clim_litt
                  , aes(dbRDA1, dbRDA2)) +
   geom_point(data = subclades_dbRDA_plot_df_PCA_clim_litt, aes(color = Ecosystem, shape = Litter_type),  size = 10, alpha = 0.75) +
-  #geom_text(data = clades_dbRDA_plot_df, aes(x=dbRDA1, y=dbRDA2-0.025, label=row.names(clades_dbRDA_plot_df)), size=4.75) +
-  #scale_color_manual(values = color_mapping_vector, name="Reserves") +
-  #facet_wrap(~Litter_type, scales = "fixed") +
   geom_segment(data = dbRDA_loadings_subclades_PCA_clim_litt,
                aes(x=0,xend=dbRDA1,y=0,yend=dbRDA2),
-               #arrow = arrow(length = unit(0.3, "cm")),
                colour="grey", inherit.aes = FALSE) +
   geom_label(data=dbRDA_loadings_subclades_PCA_clim_litt,
            aes(x=dbRDA1*1.1, y=dbRDA2*1.1, label=gsub("\\.", " ", dbRDA_loadings_subclades_PCA_clim_litt$Variables)),
            size=5,
            colour = "darkblue",
-           #fill = "white", # Optional: Background fill color for the label
     label.padding = unit(0.2, "lines"), # Padding around the text
     label.size = 0.25) +
   guides(color = guide_legend(title.position = "top"),
          shape = guide_legend(title.position = "top", title = "Litter type")) +
-  #ggtitle("dbRDA Clade level, Rar. depth: 1000. Reduction of variables by correlation") +
   xlab("dbRDA1 (76.64% of constrained, 18.82% total)") +
   ylab("dbRDA2 (11.28% of constrained, 2.77% total)") +
   theme_bw() +
@@ -1877,9 +1639,7 @@ subclades_sp_vectors_plot_PCA_clim_litt <- ggplot() +
   )
 
 dbRDA_subclades_plot_PCA_clim_litt <- dbRDA_subclades_plot_PCA_clim_litt +
-  annotation_custom(ggplotGrob(subclades_sp_vectors_plot_PCA_clim_litt), xmin = 0.9, xmax = 1.9, ymin = -0.8, ymax = -2.8) #+
-  #annotation_custom(ggplotGrob(clades_var_vectors_plot), xmin = 0.4, xmax = 2, ymin = -2, ymax = -0.8)
-#clades_sp_vectors_plot
+  annotation_custom(ggplotGrob(subclades_sp_vectors_plot_PCA_clim_litt), xmin = 0.9, xmax = 1.9, ymin = -0.8, ymax = -2.8)
 
 
 ggarrange(dbRDA_subclades_plot_PCA_clim_litt, dbrda_subclades_contributions_plot_PCA_clim_litt, nrow = 1, widths = c(1, 0.5))
@@ -1938,10 +1698,7 @@ ggsave(here::here("plots/dBRDA/dbRDA_explained_var.png"),
       scale_color_manual(values = allvars_pallete_4) +
       scale_shape_manual(values = c("significant" = 16, "non-significant" = 1),
                          name = "P value", labels = c("> 0.05", "< 0.05")) + # Filled = 16, Unfilled = 1
-      #scale_y_continuous(labels = scales::percent_format()) +
-      labs(y = "Proportion of explained variance (%)"
-           #, title = "Proportion of explained variance in DistLM model"
-           ) +
+      labs(y = "Proportion of explained variance (%)") +
     scale_x_discrete(limits = c("Clade", "Subclade", "Strain")) +
     apatheme +
     theme(axis.title.x = element_blank(),
@@ -2015,9 +1772,7 @@ dbrda_contributions_plot_constr_PCA_clim_litt_vars <- dbrda_contributions_PCA_cl
                                         "pH"))) |>
   # Create a new column 'sig' that is "*" if P_val < 0.05, else empty
   mutate(sig = ifelse(P_val < 0.05, "*", "")) |>
-    ggplot(aes(x = tax_level, y = Percent, fill = Term, color = Term#, group = Term
-               )) +
-      #geom_point(size = 4, aes(shape = factor(ifelse(P_val < 0.05, "significant", "non-significant")))) +
+    ggplot(aes(x = tax_level, y = Percent, fill = Term, color = Term)) +
   geom_col(position = "dodge") +
       scale_fill_manual(values = allvars_pallete_2, name = "Variable") +
       scale_color_manual(values = allvars_pallete_2, name = "Variable") +
@@ -2182,8 +1937,6 @@ ggsave(here::here("plots/DistLM_explained_var.png"),
 saveRDS(md4dbrda, here::here("results/rds/md4dbrda.rds"))
 saveRDS(md4dbrda_clades, here::here("results/rds/md4dbrda_clades.rds"))
 saveRDS(md4dbrda_subclades, here::here("results/rds/md4dbrda_subclades.rds"))
-saveRDS(clades_Ab_md, here::here("results/rds/clades_Ab_md.rds"))
-saveRDS(subclades_Ab_md, here::here("results/rds/subclades_Ab_md.rds"))
 saveRDS(clades_rar_otutab, here::here("results/rds/clades_rar_otutab.rds"))
 saveRDS(subclades_rar_otutab, here::here("results/rds/subclades_rar_otutab.rds"))
 ```

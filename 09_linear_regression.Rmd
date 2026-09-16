@@ -24,11 +24,15 @@ source(here::here("R/utils.R"))
 ```
 
 ```{r load-rds, message=FALSE, warning=FALSE}
-md4dbrda           <- readRDS(here::here("results/rds/md4dbrda.rds"))
-md4dbrda_clades    <- readRDS(here::here("results/rds/md4dbrda_clades.rds"))
-md4dbrda_subclades <- readRDS(here::here("results/rds/md4dbrda_subclades.rds"))
-clim_vars_PC       <- readRDS(here::here("results/rds/clim_vars_PC.rds"))
-litter_vars        <- readRDS(here::here("results/rds/litter_vars.rds"))
+md4dbrda              <- readRDS(here::here("results/rds/md4dbrda.rds"))
+md4dbrda_clades       <- readRDS(here::here("results/rds/md4dbrda_clades.rds"))
+md4dbrda_subclades    <- readRDS(here::here("results/rds/md4dbrda_subclades.rds"))
+clim_vars_PC          <- readRDS(here::here("results/rds/clim_vars_PC.rds"))
+litter_vars           <- readRDS(here::here("results/rds/litter_vars.rds"))
+tax                   <- as.data.frame(readRDS(here::here("results/rds/tax.rds")))
+clade_colors          <- readRDS(here::here("results/rds/clade_colors.rds"))
+clades_rar_otutab     <- readRDS(here::here("results/rds/clades_rar_otutab.rds"))
+subclades_rar_otutab  <- readRDS(here::here("results/rds/subclades_rar_otutab.rds"))
 ```
 
 #### Linear regression plots
@@ -196,6 +200,9 @@ subclades_Ab_md <- reshape2::melt(subclades_Ab_md, id = c("Row.names",
   mutate(clade = factor(clade, levels = c("I", "II", "III", "IV", "V"#, "UND"
                                           ))) |>
   ungroup()
+
+saveRDS(clades_Ab_md,    here::here("results/rds/clades_Ab_md.rds"))
+saveRDS(subclades_Ab_md, here::here("results/rds/subclades_Ab_md.rds"))
   #summarise_at(vars(pH,
   #                  Annual.Mean.Temperature,
   #                  Mean.Diurnal.Range,

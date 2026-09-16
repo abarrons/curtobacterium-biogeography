@@ -34,6 +34,7 @@ metadata      <- readRDS(here::here("results/rds/metadata_final.rds"))
 count_summary <- readRDS(here::here("results/rds/count_summary.rds"))
 clim_vars_PC  <- readRDS(here::here("results/rds/clim_vars_PC.rds"))
 litter_vars   <- readRDS(here::here("results/rds/litter_vars.rds"))
+plots_rf_ra   <- readRDS(here::here("results/rds/plots_rf_ra.rds"))
 ```
 
 ### Alpha Diversity Plots

@@ -33,73 +33,8 @@ pca_litt_df_md <- readRDS(here::here("results/rds/pca_litt_df_md.rds"))
 pcadf <- readRDS(here::here("results/rds/pcadf_clim.rds"))
 ```
 
-##### All environmental variables PCA
 
-```{r all-env-pca}
-colnames(metadata) <- gsub(" ", "_", colnames(metadata))
-highlyCorrelated   <- gsub(" ", "_", highlyCorrelated)
-
-pca_all <- prcomp(~ pH + crude_protein + cellulose + hemicellulose + lignin +
-                    MAT + T_Iso + T_Diurn + T_Seas + T_MaxWarmMo + T_Range +
-                    T_DryQ + T_WetQ + T_WarmQ + T_MinColdMo + T_ColdQ +
-                    MAP + P_WetMo + P_DryMo + P_WetQ + P_DryQ + P_WarmQ + P_ColdQ + P_Seas,
-                  data = metadata[, c(13, 17:19, 21:40)],
-                  center = T, scale. = T, na.action = na.exclude)
-
-pcadf_all         <- data.frame(pca_all$x)
-metadata$PC1      <- pcadf_all$PC1
-metadata$PC2      <- pcadf_all$PC2
-PCAloads_all      <- data.frame(Variables = rownames(pca_all$rotation), pca_all$rotation)
-summary(pca_all)
-
-pca_all_sq_loadings   <- pca_all$rotation^2
-pca_all_contributions <- sweep(pca_all_sq_loadings, 2, colSums(pca_all_sq_loadings), FUN = "/") * 100
-print(pca_all_contributions)
-
-pca_all_contributions <- as.data.frame(pca_all_contributions) |>
-  rownames_to_column(var = "Variable") |>
-  pivot_longer(cols = c(2:10), names_to = "PC", values_to = "Percent") |>
-  mutate(Variable = factor(Variable, levels = c(
-    "MAT","T_Iso","T_Diurn","T_Seas","T_MaxWarmMo","T_Range","T_DryQ","T_WetQ",
-    "T_WarmQ","T_MinColdMo","T_ColdQ","MAP","P_WetMo","P_DryMo","P_WetQ","P_DryQ",
-    "P_WarmQ","P_ColdQ","P_Seas","cellulose","crude_protein","hemicellulose","lignin","pH")))
-
-pca_all_contributions_plot <- pca_all_contributions |>
-  filter(PC %in% c("PC1", "PC2")) |>
-  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
-  geom_col() +
-  scale_fill_manual(values = allvars_pallete) +
-  labs(y = "% of variance contribution") +
-  guides(fill = guide_legend(ncol = 1)) +
-  theme_minimal() +
-  theme(axis.title.x = element_blank(), text = element_text(size = 22))
-pca_all_contributions_plot
-
-pca_all_plot <- ggplot(metadata, aes(PC1, PC2)) +
-  geom_point(data = metadata, aes(color = Ecosystem, shape = Litter_type), size = 10, alpha = 0.75) +
-  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
-  geom_segment(data = PCAloads_all,
-               aes(x = 0, xend = PC1 * 10, y = 0, yend = PC2 * 10),
-               colour = "grey", inherit.aes = FALSE) +
-  ggrepel::geom_label_repel(data = PCAloads_all,
-                             aes(x = PC1 * 10.7, y = PC2 * 10.7, label = Variables),
-                             size = 6, colour = "darkblue",
-                             label.padding = unit(0.2, "lines"), label.size = 0.25) +
-  xlab("PC1 (31.78%)") + ylab("PC2 (27.70%)") +
-  guides(color = guide_legend(title.position = "top"),
-         shape = guide_legend(title.position = "top", title = "Litter type")) +
-  theme_minimal() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        text = element_text(size = 22), legend.position = "bottom")
-pca_all_plot
-
-ggarrange(pca_all_plot, pca_all_contributions_plot, nrow = 1, widths = c(1, 0.5))
-ggsave(here::here("plots/PCAs/allvars_pca_ecosystem.png"),
-       width = 60, height = 40, units = "cm", dpi = 320, bg = "white")
-
-metadata <- metadata[, -which(colnames(metadata) %in% c("PC1", "PC2"))]
-colnames(metadata)[22:40] <- gsub("_", " ", colnames(metadata[22:40]))
-
+```{r}
 metadata_rd <- metadata |>
   filter(str_ends(SampleID, "1|2")) %>%
   pivot_longer(cols = where(is.numeric), names_to = "variable", values_to = "value") %>%

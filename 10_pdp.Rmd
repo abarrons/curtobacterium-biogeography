@@ -44,11 +44,9 @@ count_summary      <- readRDS(here::here("results/rds/count_summary.rds"))
 pcadf_expanded     <- readRDS(here::here("results/rds/pcadf_expanded.rds"))
 ```
 
-#### Partial dependance plots
+### Partial dependance plots
 
-#### Partial dependance plots
-
-##### PDP clade level with Random Forest model
+#### PDP clade level with Random Forest model
 
 ```{r pdp-clades-rf, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20,}
 library(iml)
@@ -62,8 +60,7 @@ output_dir <- here::here("plots/plots_pdp")
 ## add PCs from PCAs for litter chem, climate and all variables
 
 
-clim_vars <- #gsub("\\.", " ",
-                  c("MAT",
+clim_vars <- c("MAT",
               "MAP",
               "P.Seas",
               "P.WarmQ",
@@ -71,7 +68,7 @@ clim_vars <- #gsub("\\.", " ",
               "T.Diurn",
               "T.MinColdMo",
               "T.DryQ",
-              "P.DryMo")#)
+              "P.DryMo")
 
 clim_vars_PC <- c("PC1.clim",
               "PC2.clim")
@@ -79,8 +76,6 @@ clim_vars_PC <- c("PC1.clim",
 litter_vars <- c("pH", "crude_protein", "cellulose", "hemicellulose", "lignin")
 
 litter_vars_PC <- c("PC1.litt", "PC2.litt")
-
-#all_vars_PC <- c("PC1.all.vars", "PC2.all.vars")
 
 ### let's prepare also a pallete with spaces on the names of the variables
 
@@ -95,50 +90,7 @@ colnames(clades_Ab_md) <- gsub(" ", ".", colnames(clades_Ab_md))
 
 ## climate PCs and litter variables
 
-#initialize empty data frames to store results
-imp_results <- data.frame()
-effs_results <- data.frame()
 
-#Set a loop to go over each clade
-for (clade in unique(clades_Ab_md$Clade)) {
-  #Set a loop to go over each type of litter
-  #for (litter in unique(clades_Ab_md$Litter_type)) {
-    #subset for each clade and each type of litter
-    pdp_temp <- clades_Ab_md %>%
-      filter(Clade == clade# & Litter_type == litter
-                                ) %>%
-      ungroup() %>%
-      dplyr::select(-c(Row.names, reserve_code, Litter_type, Clade)) |>
-      dplyr::select(all_of(c(litter_vars, clim_vars_PC)), Abundance)
-    #create a random forest for each subseted dataset
-    rf <- randomForest(Abundance ~., data = pdp_temp, ntree = 1000)
-    #get the variables for Abundace prediction
-    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
-    #set model variables for prediction of Abundance
-    predictor <- Predictor$new(rf, data = X, y = pdp_temp$Abundance)
-    #obtain importance of varibles in the model
-    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
-    
-    #store importance results into a data frame and add clade and litter type information
-    imp_temp <-imp$results
-    imp_temp$Clade <- clade
-    #imp_temp$Litter_type <- litter
-    
-    imp_results <- rbind(imp_results, imp_temp)
-    
-    #calculate predictions
-    effs <- FeatureEffects$new(predictor, grid.size = 20, method = "pdp")
-    effs_temp <- do.call(rbind, effs$results)
-    effs_temp$Clade <- clade
-    #effs_temp$Litter_type <- litter
-   
-    effs_results <- rbind(effs_results, effs_temp)
-    
-    rug <- X
-    #object_name <- paste("rug", litter, sep = "_")
-    #assign(object_name, X)
-  #}
-}
 
 
 clade_results <- cached(here::here("cache/clade_results.rds"), {
@@ -204,14 +156,12 @@ write.table(all_summaries, file = here::here("plots/RF_validation_clades.csv"), 
 
 
 all_imp_sig    <- all_imp    %>% semi_join(sig_lookup, by = c("Clade", "feature"))
-#all_pdp_ci_sig <- all_pdp_ci %>% semi_join(sig_lookup, by = c("Clade", "feature"))
 
 # And so on…  
 # You can now plot or write out any of these combined tables:
 
 print(all_summaries)
 print(all_imp)
-#print(all_pdp_ci)
 
 
 # 0) define your clean, recoded, ordered feature vector
@@ -257,11 +207,6 @@ pos_df_clade <- all_imp_sig %>%
     y = n() + 0.3           # 0.3 units above the topmost point
   )
 
-# 3) Re‐factor `feature` using the clean `feature_levels`
-#all_imp_sig <- all_imp_sig %>%
-#  mutate(
-#    feature = factor(feature, levels = feature_levels)
-#  )
 
 
 
@@ -298,21 +243,19 @@ imp_plot_pdp_rf_clades <- all_imp_sig %>%
                               TRUE ~ "All"),
          Clade = factor(Clade, levels = c("I", "II", "III", "IV", "V", "UND"))) |> 
   dplyr::filter(Clade != "UND") |> 
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
   mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
   ggplot(aes(x = importance, y = feature, color = feature)) +
-  #scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
   scale_color_manual(values = allvars_pallete_imp,
                      labels = c(PC1 = "PC1 clim", PC2 = "PC2 clim"),
                      guide = guide_legend(ncol = 2)) +
   scale_y_discrete(limits = rev(c("PC1", "PC2", "lignin", "cellulose", "hemicellulose", "crude protein", "pH"))) +
   scale_x_continuous(labels = scales::percent_format()) +
-  #facet_grid(Clade~., scales = "free_y", space = "free_y") +
   ggh4x::facet_grid2(Clade ~ ., scales = "free_y", space = "free_y",
                        strip = ggh4x::strip_themed(
                          background_y = ggh4x::elem_list_rect(
                            fill = clade_colors[-5] # one color per Clade
-                         )
-                       )) +
+                         ))) +
   geom_point(position = position_dodge(width = 0.4), size = 2.5) +
   geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
                  position = position_dodge(width = 0.4),
@@ -328,7 +271,7 @@ imp_plot_pdp_rf_clades <- all_imp_sig %>%
     size        = 3
   ) +
   apatheme +
-  theme(#strip.background = element_rect(fill = NA, colour = "black"),
+  theme(
     axis.text.y = element_blank(),
     axis.title.y = element_blank(),
     axis.line.y = element_blank(),
@@ -345,10 +288,6 @@ print(imp_plot_pdp_rf_clades)
 
 # prepare rug data
 rug_all <- reshape2::melt(clade_results$I$rug) %>%
-  #filter(variable %in% unique(sig_lookup$feature)) |>
-  #filter(variable %in% clim_vars) |>
-  #filter(.feature %in% clim_vars) %>%
-  #dplyr::rename(variable = .feature) #%>%
   dplyr::rename(feature = variable) |>
   mutate(var_type = case_when(
     feature %in% c(clim_vars_PC, clim_vars) ~ "Climate",
@@ -392,7 +331,6 @@ pdp_plot_ci_clades <- all_pdp_ci %>%
     ggplot(aes(x = value, y = mean_pred, color = Clade, linetype = significant)) +
     
       # 4) ribbon + line
-      #geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = feature), alpha = 0.2, colour = NA) +
       geom_line(size = 1) +
     
       # 5) percent y-axis
@@ -400,9 +338,7 @@ pdp_plot_ci_clades <- all_pdp_ci %>%
     
       # 6) match your custom palette
       scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "UND")) +
-      #scale_fill_manual(values = allvars_pallete) +
       scale_linetype_manual(name = NULL,
-                            #name = expression(italic("P")),
                             values = c("TRUE" = "solid", "FALSE" = "longdash"),
                             labels = c(expression(P > 0.05),                      # math‐style labels
                                        expression(P < 0.05))) +
@@ -471,228 +407,18 @@ ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_clades_PCclim_litt_var
 
 ```
 
-##### PDP clade level with generalized linear model model
-
-```{r pdp-clades-glm, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20,}
-set.seed(711)
-
-# Set up an output directory to save the plots
-output_dir <- here::here("plots/plots_glm_pdp")
-#dir.create(output_dir, showWarnings = FALSE)
- 
-#initialize empty data frames to store results
-imp_results <- data.frame()
-effs_results <- data.frame()
-
-#Set a loop to go over each clade
-for (clade in unique(clades_Ab_md$Clade)) {
-  #Set a loop to go over each type of litter
-  #for (litter in unique(clades_Ab_md$Litter_type)) {
-    #subset for each clade and each type of litter
-    pdp_temp <- clades_Ab_md %>%
-      filter(Clade == clade #& Litter_type == litter
-                                ) %>%
-      ungroup() %>%
-      dplyr::select(-c(Row.names, reserve_code, Litter_type, Clade)) |>
-      dplyr::select(all_of(c(litter_vars, clim_vars_PC)), Abundance)
-    #create a GLM for each subseted dataset
-    glm.mod <- glm(Abundance ~., data = pdp_temp)
-    #get the variables for Abundace prediction
-    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
-    #set model variables for prediction of Abundance
-    predictor <- Predictor$new(glm.mod, data = X, y = pdp_temp$Abundance)
-    #obtain importance of varibles in the model
-    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
-    
-    #store importance results into a data frame and add clade and litter type information
-    imp_temp <-imp$results
-    imp_temp$Clade <- clade
-    #imp_temp$Litter_type <- litter
-    
-    imp_results <- rbind(imp_results, imp_temp)
-    
-    #calculate predictions
-    effs <- FeatureEffects$new(predictor, grid.size = 50, method = "pdp")
-    effs_temp <- do.call(rbind, effs$results)
-    effs_temp$Clade <- clade
-    #effs_temp$Litter_type <- litter
-   
-    effs_results <- rbind(effs_results, effs_temp)
-  #}
-}
-
-imp_plot_pdp_glm <- imp_results %>%
-  mutate(var_type = case_when(feature %in% clim_vars_PC ~ "Climate",
-                              feature %in% litter_vars ~ "Litter chem.",
-                              TRUE ~ "All")) |>
-  mutate(feature = gsub("\\.", " ", feature)) %>%
-    ggplot(aes(x = importance, y = feature, color = Clade)) +
-    scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
-    facet_grid(var_type~., scales = "free_y", space = "free_y") +
-    geom_point(position = position_dodge(width = 0.4), size = 3) +
-    geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
-                   position = position_dodge(width = 0.4),
-                   height = 0,
-                   linewidth = 1.5) +
-  apatheme +
-  theme(text = element_text(size = 20),
-    strip.background = element_rect(fill = NA, colour = "black"),
-                                                            strip.text = element_text(size = 10),
-                                                            panel.grid.major.x = element_line(colour = "grey90"))
-print(imp_plot_pdp_glm)
-
-pdp_plot_glm <- effs_results %>%
-  mutate(var_type = case_when(.feature %in% clim_vars_PC ~ "Climate",
-                              .feature %in% litter_vars ~ "Litter chem.",
-                              TRUE ~ NA)) |>
-  mutate(.feature = gsub("\\.", " ", .feature)) %>%
-  ggplot(aes(x = .borders, y = .value, color = Clade)) +
-  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
-  scale_y_continuous(labels = scales::percent_format(scale = 0.1)) +
-  geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = F) +
-  #geom_rug(data = rug_G, aes(x = value), sides = "b", inherit.aes = F) +
-  #facet_grid(Litter_type~.feature, scales = "free_x") +
-  ggh4x::facet_nested(~var_type + .feature, scales = "free_x") +
-  labs(x = "Variable value", y = "Predicted relative abundance") +
-  geom_line(linewidth = 1) +
-  apatheme +
-  theme(text = element_text(size = 18),
-    strip.background = element_rect(fill = NA, colour = "black"),
-        strip.text = element_text(size = 10),
-        panel.grid.major.y = element_line(colour = "grey90"))
-
-print(pdp_plot_glm)
-
-ggarrange(pdp_plot_glm, imp_plot_pdp_glm,
-          labels = "AUTO",
-          ncol = 2,
-          common.legend = T,
-          legend = "bottom",
-          widths = c(1, 0.5))
-
-ggsave(filename = here::here("plots_glm_pdp/pdp_plot_glm_clades.png"),
-       width =  65,
-       height = 25,
-       units = "cm",
-       dpi = 320)
-
-
-##### climate PCs
-
-
-#initialize empty data frames to store results
-imp_results <- data.frame()
-effs_results <- data.frame()
-
-#Set a loop to go over each clade
-for (clade in unique(clades_Ab_md$Clade)) {
-  #Set a loop to go over each type of litter
-  #for (litter in unique(clades_Ab_md$Litter_type)) {
-    #subset for each clade and each type of litter
-    pdp_temp <- clades_Ab_md %>%
-      filter(Clade == clade #& Litter_type == litter
-                                ) %>%
-      ungroup() %>%
-      dplyr::select(Abundance, PC1.clim, PC2.clim)
-    #create a GLM for each subseted dataset
-    glm.mod <- glm(Abundance ~., data = pdp_temp)
-    #get the variables for Abundace prediction
-    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
-    #set model variables for prediction of Abundance
-    predictor <- Predictor$new(glm.mod, data = X, y = pdp_temp$Abundance)
-    #obtain importance of varibles in the model
-    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
-    
-    #store importance results into a data frame and add clade and litter type information
-    imp_temp <-imp$results
-    imp_temp$Clade <- clade
-    #imp_temp$Litter_type <- litter
-    
-    imp_results <- rbind(imp_results, imp_temp)
-    
-    #calculate predictions
-    effs <- FeatureEffects$new(predictor, grid.size = 50, method = "pdp")
-    effs_temp <- do.call(rbind, effs$results)
-    effs_temp$Clade <- clade
-    #effs_temp$Litter_type <- litter
-   
-    effs_results <- rbind(effs_results, effs_temp)
-    
-    rug <- X
-    #object_name <- paste("rug", litter, sep = "_")
-    #assign(object_name, X)
-  #}
-}
-
-rug_pca<- reshape2::melt(rug) %>%
-  dplyr::rename(.feature = variable) %>%
-  #filter(!.feature %in% c(litter_vars, clim_vars)) %>%
-  mutate(.feature = gsub("\\.", " ", .feature))
-
-
-imp_plot_pdp_glm_pca_clim <- imp_results %>%
-  #mutate(var_type = case_when(feature %in% clim_vars ~ "Climate",
-  #                            feature %in% litter_vars ~ "Litter chem.",
-  #                            TRUE ~ "All")) |>
-  mutate(feature = gsub("\\.", " ", feature)) %>%
-    ggplot(aes(x = importance, y = feature, color = Clade)) +
-    scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
-    #facet_grid(var_type~., scales = "free_y", space = "free_y") +
-    geom_point(position = position_dodge(width = 0.4), size = 3) +
-    geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
-                   position = position_dodge(width = 0.4),
-                   height = 0,
-                   linewidth = 1.5) +
-  apatheme +
-  theme(text = element_text(size = 20),
-    strip.background = element_rect(fill = NA, colour = "black"),
-                                                            strip.text = element_text(size = 10),
-                                                            panel.grid.major.x = element_line(colour = "grey90"))
-print(imp_plot_pdp_glm_pca_clim)
-
-pdp_plot_glm_pca_clim <- effs_results %>%
-  #mutate(var_type = case_when(.feature %in% clim_vars ~ "Climate",
-  #                            .feature %in% litter_vars ~ "Litter chem.",
-  #                            TRUE ~ "All")) |>
-  mutate(.feature = gsub("\\.", " ", .feature)) %>%
-  ggplot(aes(x = .borders, y = .value, color = Clade)) +
-  scale_color_manual(values = clade_colors, limits = c("I", "II", "III", "IV", "V", "UND")) +
-  scale_y_continuous(labels = scales::percent_format(scale = 0.1)) +
-  geom_rug(data = rug_pca, aes(x = value), sides = "b", inherit.aes = F) +
-  #geom_rug(data = rug_G, aes(x = value), sides = "b", inherit.aes = F) +
-  #facet_grid(Litter_type~.feature, scales = "free_x") +
-  facet_grid(~.feature, scales = "free_x") +
-  labs(x = "Variable value", y = "Predicted relative abundance") +
-  geom_line(linewidth = 1) +
-  apatheme +
-  theme(text = element_text(size = 18),
-    strip.background = element_rect(fill = NA, colour = "black"),
-        strip.text = element_text(size = 10),
-        panel.grid.major.y = element_line(colour = "grey90"))
-
-print(pdp_plot_glm_pca_clim)
-
-ggarrange(pdp_plot_glm_pca_clim, imp_plot_pdp_glm_pca_clim,
-          labels = "AUTO",
-          ncol = 2,
-          common.legend = T,
-          legend = "bottom",
-          widths = c(1, 0.5))
-
-ggsave(filename = here::here("plots_glm_pdp/pdp_plot_glm_clades_pca_clim.png"),
-       width =  65,
-       height = 25,
-       units = "cm",
-       dpi = 320)
-
-
-
-```
+#### PDP clade level with generalized linear model model
 
 ##### PDP clade level with run_glm_analysis (bootstrapped CIs)
 
 ```{r pdp-clades-glm-ci, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
 set.seed(711)
+
+
+# Set up an output directory to save the plots
+output_dir <- here::here("plots/plots_glm_pdp")
+#dir.create(output_dir, showWarnings = FALSE)
+ 
 
 clade_glm_results <- cached(here::here("cache/clade_glm_results.rds"), {
   res_list <- list()
@@ -769,6 +495,7 @@ imp_plot_pdp_glm_clades <- all_imp_sig_glm %>%
                               TRUE ~ "All"),
          Clade = factor(Clade, levels = c("I", "II", "III", "IV", "V", "UND"))) |>
   dplyr::filter(Clade != "UND") |>
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
   mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
   ggplot(aes(x = importance, y = feature, color = feature)) +
   scale_color_manual(values = allvars_pallete_imp,
@@ -843,7 +570,9 @@ ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_clades_PCclim_litt_va
        width = width, height = width * 0.5, units = "mm", dpi = 300)
 ```
 
-##### PDP subclade level with Random Forest model
+#### PDP subclade level
+
+#####PDP subclade level with Random Forest model
 
 ```{r pdp-subclades-rf, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
 
@@ -852,51 +581,6 @@ set.seed(711)
 colnames(subclades_Ab_md) <- gsub(" ", ".", colnames(subclades_Ab_md))
 
 
-#initialize empty data frames to store results
-imp_results <- data.frame()
-effs_results <- data.frame()
-
-#Set a loop to go over each clade
-for (subclade in unique(subclades_Ab_md$Subclade)) {
-#for (subclade in c("IC", "IIG", "IIIA", "IVA", "IVB", "VA")) {
-  #Set a loop to go over each type of litter
-  #for (litter in unique(subclades_Ab_md$Litter_type)) {
-    #subset for each clade and each type of litter
-    pdp_temp <- subclades_Ab_md %>%
-      filter(Subclade == subclade #& Litter_type == litter
-                                ) %>%
-      ungroup() %>%
-      dplyr::select(-c(Row.names, reserve_code, Litter_type, Subclade, clade)) |>
-      dplyr::select(all_of(c(litter_vars, clim_vars_PC)), Abundance)
-    #create a random forest for each subseted dataset
-    rf <- randomForest(Abundance ~., data = pdp_temp, ntree = 1000)
-    #get the variables for Abundace prediction
-    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
-    #set model variables for prediction of Abundance
-    predictor <- Predictor$new(rf, data = X, y = pdp_temp$Abundance)
-    #obtain importance of varibles in the model
-    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
-    
-    #store importance results into a data frame and add clade and litter type information
-    imp_temp <-imp$results
-    imp_temp$Subclade <- subclade
-    #imp_temp$Litter_type <- litter
-    
-    imp_results <- rbind(imp_results, imp_temp)
-    
-    #calculate predictions
-    effs <- FeatureEffects$new(predictor, grid.size = 20, method = "pdp")
-    effs_temp <- do.call(rbind, effs$results)
-    effs_temp$Subclade <- subclade
-    #effs_temp$Litter_type <- litter
-   
-    effs_results <- rbind(effs_results, effs_temp)
-    
-    rug <- X
-    #object_name <- paste("rug", litter, sep = "_")
-    #assign(object_name, X)
-  #}
-}
 
 subclade_results <- cached(here::here("cache/subclade_results.rds"), {
   res_list <- list()
@@ -974,8 +658,6 @@ mean_cv_r2_sig_sub
 write.table(all_summaries_sub, file = here::here("plots/RF_validation_subclades.csv"), quote = F, row.names = F, col.names = T, sep = ",")
 
 all_imp_sig_sub    <- all_imp_sub    %>% semi_join(sig_lookup_sub, by = c("Subclade", "feature"))
-#all_pdp_ci_sig_sub <- all_pdp_ci_sub %>% semi_join(sig_lookup_sub, by = c("Subclade", "feature"))
-
 
 # 1) Re‐mutate `all_imp_sig` so that its `feature` column is exactly one of those names:
 all_imp_sig_sub <- all_imp_sig_sub %>%
@@ -1001,8 +683,6 @@ pos_df_subclade <- all_imp_sig_sub %>%
   )
 
 
-
-
 # 1) extract per‐clade CV R² & p‐value
 annot_df_subclade <- all_summaries_sub %>%
   dplyr::select(Subclade, `10-fold CV R²`, `Permuted CV p-value`) %>%
@@ -1021,14 +701,10 @@ annot_df_subclade <- all_summaries_sub %>%
     )
   )
 
-
-
 annot_df_subclade <- annot_df_subclade %>% left_join(pos_df_subclade, by="Subclade") |>
   dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
   mutate(Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG")))
   
-
-
 
 imp_plot_pdp_rf_sub <- all_imp_sig_sub %>%
   dplyr::filter(Subclade %in% c("IC", "IIG", "IIIA", "IVB")) |>
@@ -1036,6 +712,7 @@ imp_plot_pdp_rf_sub <- all_imp_sig_sub %>%
                               feature %in% litter_vars ~ "Litter chemistry",
                               TRUE ~ NA),
          Subclade = factor(Subclade, levels = c("IIIA", "IC", "IVB", "IIG"))) |> 
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
   mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
   ggplot(aes(x = importance, y = feature, color = feature)) +
   #scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVA", "IVB", "VA")) +
@@ -1086,7 +763,6 @@ print(imp_plot_pdp_rf_sub)
 
 # prepare rug data
 rug_all <- reshape2::melt(subclade_results$IIIA$rug) %>%
-  #dplyr::filter(variable %in% unique(sig_lookup_sub$feature) & variable != "crude_protein") |>
   dplyr::rename(feature = variable) |>
   mutate(var_type = case_when(
     feature %in% c(clim_vars_PC, clim_vars) ~ "Climate",
@@ -1129,7 +805,6 @@ pdp_plot_ci_subclades <- all_pdp_ci_sub %>%
     ggplot(aes(x = value, y = mean_pred, color = Subclade, linetype = significant)) +
     
       # 4) ribbon + line
-      #geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper, fill = feature), alpha = 0.2, colour = NA) +
       geom_line(size = 1) +
     
       # 5) percent y-axis
@@ -1137,9 +812,7 @@ pdp_plot_ci_subclades <- all_pdp_ci_sub %>%
     
       # 6) match your custom palette
       scale_color_manual(values = subclade_colors_bp, limits = c("IC", "IIG", "IIIA", "IVB")) +
-      #scale_fill_manual(values = allvars_pallete) +
       scale_linetype_manual(name = NULL,
-                            #name = expression(italic("P")),
                             values = c("TRUE" = "solid", "FALSE" = "longdash"),
                             labels = c(expression(P > 0.05),                      # math‐style labels
                                        expression(P < 0.05))) +
@@ -1221,6 +894,7 @@ imp_plot_pdp_rf_sub_lowAb <- all_imp_sig_sub %>%
                               feature %in% litter_vars ~ "Litter chemistry",
                               TRUE ~ NA),
          Subclade = factor(Subclade, levels = correct_order[-c(1,4,5,12,16,17,23,25,29)])) |> 
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
   mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
   ggplot(aes(x = importance, y = feature, color = feature)) +
   #scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVA", "IVB", "VA")) +
@@ -1372,105 +1046,7 @@ ggsave(filename = here::here("plots/plots_pdp/pdp_plot_rf_subclades_PCAclim_litt
 
 ##### PDP subclade level with generalized linear model model
 
-```{r pdp-subclades-glm, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20,}
-set.seed(711)
- 
-#initialize empty data frames to store results
-imp_results <- data.frame()
-effs_results <- data.frame()
-
-#Set a loop to go over each clade
-#for (subclade in unique(subclades_Ab_md$Subclade)) {
-for (subclade in c("IC", "IIG", "IIIA", "IVB", "VA")) {
-  #Set a loop to go over each type of litter
-  #for (litter in unique(subclades_Ab_md$Litter_type)) {
-    #subset for each clade and each type of litter
-    pdp_temp <- subclades_Ab_md %>%
-      filter(Subclade == subclade #& Litter_type == litter
-                                ) %>%
-      ungroup() %>%
-      dplyr::select(!c(Row.names, reserve_code, Litter_type, Subclade, clade))
-    #create a GLM for each subseted dataset
-    glm.mod <- glm(Abundance ~., data = pdp_temp)
-    #get the variables for Abundace prediction
-    X <- pdp_temp[!(names(pdp_temp) %in% "Abundance")]
-    #set model variables for prediction of Abundance
-    predictor <- Predictor$new(glm.mod, data = X, y = pdp_temp$Abundance)
-    #obtain importance of varibles in the model
-    imp <- FeatureImp$new(predictor, loss = "rmse", n.repetitions = 100, compare = "difference")
-    
-    #store importance results into a data frame and add clade and litter type information
-    imp_temp <-imp$results
-    imp_temp$Subclade <- subclade
-    #imp_temp$Litter_type <- litter
-    
-    imp_results <- rbind(imp_results, imp_temp)
-    
-    #calculate predictions
-    effs <- FeatureEffects$new(predictor, grid.size = 1000, method = "pdp")
-    effs_temp <- do.call(rbind, effs$results)
-    effs_temp$Subclade <- subclade
-    #effs_temp$Litter_type <- litter
-   
-    effs_results <- rbind(effs_results, effs_temp)
-  #}
-}
-
-imp_plot_pdp_glm_sub <- imp_results %>%
-  mutate(var_type = case_when(feature %in% clim_vars ~ "Climate",
-                              feature %in% litter_vars ~ "Litter chem.",
-                              TRUE ~ "All")) |>
-  mutate(feature = gsub("\\.", " ", feature)) %>%
-    ggplot(aes(x = importance, y = feature, color = Subclade)) +
-    scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVB", "VA")) +
-    #facet_grid(Litter_type~.) +
-    facet_grid(var_type~., scales = "free_y", space = "free_y") +
-    geom_point(position = position_dodge(width = 0.4), size = 3) +
-    geom_errorbarh(aes(xmin = importance.05, xmax = importance.95),
-                   position = position_dodge(width = 0.4),
-                   height = 0,
-                   linewidth = 1.5) + apatheme + theme(strip.background = element_rect(fill = NA, colour = "black"),
-                                                            strip.text = element_text(size = 10),
-                                                            panel.grid.major.x = element_line(colour = "grey90"))
-print(imp_plot_pdp_glm_sub)
-
-pdp_plot_glm_sub <- effs_results %>%
-  mutate(var_type = case_when(.feature %in% clim_vars ~ "Climate",
-                              .feature %in% litter_vars ~ "Litter chem.",
-                              TRUE ~ "All")) |>
-  mutate(.feature = gsub("\\.", " ", .feature)) %>%
-  ggplot(aes(x = .borders, y = .value, color = Subclade)) +
-  scale_color_manual(values = subclade_colros, limits = c("IC", "IIG", "IIIA", "IVB", "VA")) +
-  scale_y_continuous(limits = c(0, 10),
-                     labels = scales::percent_format(scale = 0.1)) +
-  geom_rug(data = rug_all, aes(x = value), sides = "b", inherit.aes = F) +
-  #geom_rug(data = rug_G, aes(x = value), sides = "b", inherit.aes = F) +
-  #facet_grid(Litter_type~.feature, scales = "free_x") +
-  ggh4x::facet_nested(~var_type + .feature, scales = "free_x") +
-  labs(x = "Variable value", y = "Predicted relative abundance") +
-  geom_line(linewidth = 1) +
-  apatheme +
-  theme(strip.background = element_rect(fill = NA, colour = "black"),
-        strip.text = element_text(size = 10),
-        panel.grid.major.y = element_line(colour = "grey90"))
-
-print(pdp_plot_glm_sub)
-
-ggarrange(pdp_plot_glm_sub, imp_plot_pdp_glm_sub,
-          labels = "AUTO",
-          ncol = 2,
-          common.legend = T,
-          legend = "bottom",
-          widths = c(1, 0.5))
-
-ggsave(filename = here::here("plots_glm_pdp/pdp_plot_glm_subclades.png"),
-       width =  65,
-       height = 25,
-       units = "cm",
-       dpi = 320)
-
-```
-##### PDP subclade level with run_glm_analysis (bootstrapped CIs)
+###### PDP subclade level with run_glm_analysis (bootstrapped CIs)
 
 ```{r pdp-subclades-glm-ci, message=FALSE, warning=FALSE, results='hold', echo=FALSE, fig.width=25, fig.height=20}
 set.seed(711)
@@ -1663,6 +1239,7 @@ imp_plot_pdp_glm_sub_lowAb <- all_imp_sig_glm_sub %>%
                               feature %in% litter_vars  ~ "Litter chemistry",
                               TRUE ~ NA),
          Subclade = factor(Subclade, levels = subs_lowAb)) |>
+  mutate(feature = dplyr::recode(feature, `PC1 clim` = "PC1", `PC2 clim` = "PC2")) |>
   mutate(feature = factor(feature, levels = feature_levels_imp)) %>%
   ggplot(aes(x = importance, y = feature, color = feature)) +
   scale_color_manual(values = allvars_pallete_imp,

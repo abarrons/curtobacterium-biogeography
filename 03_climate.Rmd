@@ -136,54 +136,7 @@ highlyCorrelated <- findCorrelation(cor.matrix, cutoff = 0.85, names = T, exact 
 print(highlyCorrelated)
 highlyCorrelated <- c(highlyCorrelated[highlyCorrelated != "MAP"], "P_ColdQ")
 
-# PCA on all 19 bioclimatic variables
-rownames(bioclim_vars_md) <- bioclim_vars_md$reserve_litter
-pca_bcv   <- prcomp(bioclim_vars_md[, c(22:40)], center = T, scale. = T)
-pcadf_bcv <- data.frame(pca_bcv$x)
-bioclim_vars_md$PC1 <- pcadf_bcv$PC1
-bioclim_vars_md$PC2 <- pcadf_bcv$PC2
-PCAloads_bcv <- data.frame(Variables = rownames(pca_bcv$rotation), pca_bcv$rotation)
-summary(pca_bcv)
 
-pca_sq_loadings_bcv   <- pca_bcv$rotation^2
-pca_contributions_bcv <- sweep(pca_sq_loadings_bcv, 2, colSums(pca_sq_loadings_bcv), FUN = "/") * 100
-print(pca_contributions_bcv)
-
-pca_plot_bcv <- ggplot(bioclim_vars_md, aes(PC1, PC2)) +
-  geom_point(data = bioclim_vars_md, aes(color = Ecosystem, shape = Litter_type), size = 4, alpha = 0.75) +
-  geom_text(data = bioclim_vars_md, aes(x = PC1, y = PC2 - 0.35, label = reserve_litter), size = 4.75) +
-  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
-  geom_segment(data = PCAloads_bcv[-which(PCAloads_bcv$Variables %in% highlyCorrelated), ],
-               aes(x = 0, xend = PC1 * 10, y = 0, yend = PC2 * 10),
-               colour = "grey", inherit.aes = FALSE) +
-  geom_label(data = PCAloads_bcv[-which(PCAloads_bcv$Variables %in% highlyCorrelated), ],
-             aes(x = PC1 * 10.7, y = PC2 * 10.7, label = Variables),
-             size = 6, colour = "darkblue",
-             label.padding = unit(0.2, "lines"), label.size = 0.25) +
-  xlab("PC1 (40.54%)") + ylab("PC2 (33.32%)") +
-  theme_minimal() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        text = element_text(size = 22), legend.position = "bottom") +
-  apatheme
-pca_plot_bcv
-
-pca_contributions_bcv <- as.data.frame(pca_contributions_bcv) |>
-  rownames_to_column(var = "Variable") |>
-  pivot_longer(cols = c(2:10), names_to = "PC", values_to = "Percent") |>
-  mutate(Variable = factor(Variable, levels = colnames(bioclim_vars_md[22:40])))
-
-pca_clim_contributions_plot_bcv <- pca_contributions_bcv |>
-  filter(PC %in% c("PC1", "PC2")) |>
-  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
-  geom_col() +
-  scale_fill_manual(values = clim_pallete) +
-  labs(y = "% of variance contribution") +
-  apatheme + theme(axis.title.x = element_blank())
-pca_clim_contributions_plot_bcv
-
-ggarrange(pca_plot_bcv, pca_clim_contributions_plot_bcv, nrow = 1, widths = c(1, 0.5))
-ggsave(here::here("plots/PCAs/clim_pca_ecosystem_bcv.png"),
-       width = 220, height = 110, units = "mm", dpi = 300, bg = "white")
 ```
 
 ###### Climate by plot

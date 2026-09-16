@@ -148,7 +148,7 @@ metadata_summary <- metadata |>
   distinct(Reserve, Litter_type, .keep_all = TRUE) |>
   dplyr::select(-c(ID_Number, SampleID, Litter_species_common_name, pH))
 
-writexl::write_xlsx(metadata_summary, here::here("results/metadata_summary.xlsx"))
+#writexl::write_xlsx(metadata_summary, here::here("results/metadata_summary.xlsx"))
 
 
 ```

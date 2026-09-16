@@ -82,51 +82,9 @@ metadata <- column_to_rownames(metadata, var = "SampleID")
 # PCA on all samples
 pca_litt <- prcomp(~ pH + crude_protein + cellulose + hemicellulose + lignin,
                    data = metadata[, c(11, 15:19)], center = T, scale. = T, na.action = na.exclude)
-summary(pca_litt)
 
-pca_litt_sq_loadings   <- pca_litt$rotation^2
-pca_litt_contributions <- sweep(pca_litt_sq_loadings, 2, colSums(pca_litt_sq_loadings), FUN = "/") * 100
-print(pca_litt_contributions)
-
-pca_litt_contributions <- as.data.frame(pca_litt_contributions) |>
-  rownames_to_column(var = "Variable") |>
-  pivot_longer(cols = c(2:6), names_to = "PC", values_to = "Percent")
-
-pca_litt_contributions_plot <- pca_litt_contributions |>
-  filter(PC %in% c("PC1", "PC2")) |>
-  ggplot(aes(x = PC, y = Percent, fill = Variable)) +
-  geom_col() +
-  scale_fill_manual(values = c("#8B4513", "#D2691E", "#F4A460", "#FFD700", "black")) +
-  labs(y = "% of variance contribution") +
-  apatheme +
-  theme(axis.title.x = element_blank())
-
-pca_litt_contributions_plot
-
-pca_litt_df      <- data.frame(pca_litt$x)
-pca_litt_df      <- merge(pca_litt_df, metadata, by = "row.names", all.x = T)
-PCAloads_litt    <- data.frame(Variables = rownames(pca_litt$rotation), pca_litt$rotation)
-
-pca_plot_litt <- ggplot(pca_litt_df, aes(PC1, PC2)) +
-  geom_point(data = pca_litt_df, aes(color = Ecosystem, shape = Plant_type), size = 5, alpha = 0.75) +
-  scale_color_manual(values = ecosystem_colors, name = "Ecosystem") +
-  geom_segment(data = PCAloads_litt,
-               aes(x = 0, xend = PC1 * 1, y = 0, yend = PC2 * 1),
-               arrow = arrow(length = unit(0.3, "cm")), colour = "grey", inherit.aes = FALSE) +
-  ggrepel::geom_label_repel(data = PCAloads_litt,
-                             aes(x = PC1 * 1.07, y = PC2 * 1.07, label = Variables),
-                             size = 6, colour = "darkblue",
-                             label.padding = unit(0.2, "lines"), label.size = 0.25) +
-  xlab("PC1 (53.47%)") + ylab("PC2 (18.10%)") +
-  guides(color = guide_legend(title.position = "top"),
-         shape = guide_legend(title.position = "top", title = "Plant type")) +
-  apatheme + theme(legend.position = "bottom")
-pca_plot_litt
-
-ggarrange(pca_plot_litt, pca_litt_contributions_plot, nrow = 1, widths = c(1, 0.5))
-
-ggsave(here::here("plots/PCAs/litter_chem_pca_pH_plant.png"),
-       width = 100 * 1.3, height = 100, units = "mm", dpi = 300)
+pca_litt_df <- data.frame(pca_litt$x)
+pca_litt_df <- merge(pca_litt_df, metadata, by = "row.names", all.x = T)
 
 metadata <- metadata |> rownames_to_column("SampleID")
 litter_md <- metadata |> filter(str_ends(SampleID, "1|2")) |> column_to_rownames("SampleID")

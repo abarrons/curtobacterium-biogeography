@@ -37,6 +37,7 @@ extrafont::loadfonts(device = "pdf", quiet = TRUE)
 
 ```{r load-rds, message=FALSE, warning=FALSE}
 mg <-              readRDS(here::here("results/rds/mg.rds"))
+tax <-             as.data.frame(readRDS(here::here("results/rds/tax.rds")))
 metadata <-        readRDS(here::here("results/rds/metadata_final.rds"))
 sam_data <-        readRDS(here::here("results/rds/sam_data.rds"))
 pca_litt_df_md <-  readRDS(here::here("results/rds/pca_litt_df_md.rds"))
@@ -109,7 +110,7 @@ top5_genera |> dplyr::select(mean_RA) |> deframe() |> sum()
 mg_g_rar_RA_curto <- psmelt(mg_g_mer_RA) |>
   filter(OTU == "Curtobacterium") |>
   dplyr::select(-SampleID) |>
-  rename(SampleID = Sample) |>
+  dplyr::rename(SampleID = Sample) |>
   (\(df) {
     na_cols <- names(df)[sapply(df, anyNA)]
     left_join(df,
@@ -120,7 +121,7 @@ mg_g_rar_RA_curto <- psmelt(mg_g_mer_RA) |>
 
 mg_g_rar_RA_curto |>
   group_by(reserve_code) |>
-  summarise(mean_RA = mean(Abundance, na.rm = TRUE) * 100, .groups = "drop") |>
+  dplyr::summarise(mean_RA = mean(Abundance, na.rm = TRUE) * 100, .groups = "drop") |>
   arrange(desc(mean_RA)) |>
   print(n = 24)
 
@@ -128,7 +129,7 @@ metadata$sampleID <- row.names(metadata)
 count_summary <- mg_g_rar_RA_curto
 
 # Relative abundance plots
-curto_total.ra_plot <- ggplot(count_summary, aes(reorder(sampleID, Abundance, decreasing = T), Abundance)) +
+curto_total.ra_plot <- ggplot(count_summary, aes(reorder(SampleID, Abundance, decreasing = T), Abundance)) +
   geom_bar(stat = "identity", fill = "steelblue") +
   labs(title = "Relative abundances of Curtobacterium sequences in each metagenomic library",
        x = "Sample", y = "Curto rel. abundance") +
@@ -244,56 +245,7 @@ litter_vars_PC <- c("PC1.litt", "PC2.litt")
 colnames(count_summary) <- gsub(" ", ".", colnames(count_summary))
 
 
-# Exploratory PDP (iml / simple RF)
-pdp_temp <- count_summary %>%
-  dplyr::select(-c(SampleID, reserve_code, Litter_type)) %>%
-  dplyr::select(all_of("Abundance"), dplyr::all_of(c(clim_vars_PC, litter_vars))) %>%
-  na.omit() |>
-  dplyr::rename(curto_ra = Abundance)
 
-rf.mod  <- randomForest(curto_ra ~ ., data = pdp_temp)
-glm.mod <- glm(curto_ra ~ ., data = pdp_temp)
-X       <- pdp_temp[!(names(pdp_temp) %in% "curto_ra")]
-predictor_rf  <- Predictor$new(model = rf.mod,  data = X, y = pdp_temp$curto_ra)
-predictor_glm <- Predictor$new(glm.mod, data = X, y = pdp_temp$curto_ra)
-imp_rf        <- iml::FeatureImp$new(predictor_rf,  loss = "rmse", n.repetitions = 100, compare = "difference")
-imp_glm       <- FeatureImp$new(predictor_glm, loss = "rmse", n.repetitions = 100, compare = "difference")
-imp_results_rf  <- imp_rf$results
-imp_results_glm <- imp_glm$results
-effs_rf  <- FeatureEffects$new(predictor_rf,  grid.size = 20, method = "pdp")
-effs_glm <- FeatureEffects$new(predictor_glm, grid.size = 20, method = "pdp")
-effs_results_rf  <- do.call(rbind, effs_rf$results)
-effs_results_glm <- do.call(rbind, effs_glm$results)
-rug <- X
-
-pdp_plot_rf <- effs_results_rf %>%
-  mutate(var_type = case_when(.feature %in% clim_vars_PC ~ "Climate",
-                              .feature %in% litter_vars  ~ "Litter chemistry", TRUE ~ NA),
-         .feature = dplyr::recode(.feature, PC1.clim = "PC1", PC2.clim = "PC2")) |>
-  dplyr::filter(.type == "pdp") %>%
-  mutate(.feature = gsub("_", " ", .feature)) %>%
-  ggplot(aes(x = .borders, y = .value, color = .feature)) +
-  scale_color_manual(values = allvars_pallete) +
-  scale_y_continuous(labels = scales::percent_format(scale = 100)) +
-  geom_rug(data = reshape2::melt(rug) |> dplyr::rename(.feature = variable) |>
-             mutate(.feature = dplyr::recode(.feature, PC1.clim = "PC1", PC2.clim = "PC2"),
-                    .feature = gsub("_", " ", .feature)),
-           aes(x = value), sides = "b", inherit.aes = FALSE) +
-  ggh4x::facet_nested(~ var_type + .feature, scales = "free_x") +
-  labs(x = "Variable value",
-       y = "Predicted relative abundance\n(# Curtobacterium reads/# total prokaryotic reads)") +
-  geom_line(linewidth = 1) +
-  guides(color = "none") +
-  apatheme +
-  theme(axis.title.y = element_text(size = 8, margin = ggplot2::margin(r = 10)),
-        strip.background = element_rect(fill = NA, colour = "black"),
-        strip.text = element_text(size = 10),
-        panel.grid.major.y = element_line(colour = "grey90"),
-        text = element_text(size = 10))
-print(pdp_plot_rf)
-
-ggsave(filename = here::here("plots/plots_pdp/pdp_plot_glm_totalCurtoRA_clim_litt_vars.png"),
-       width = 60, height = 40, units = "cm", dpi = 320)
 
 # Bootstrapped RF analysis with CIs
 curto_ra_res <- cached(here::here("cache/curto_ra_res.rds"), {
@@ -394,9 +346,6 @@ mg_rar
 ```{r count-plots, fig.width=30, fig.height=14, message=FALSE, warning=FALSE, results='hold', echo=FALSE}
 curto_total.ra_plot
 
-model <- lm(curto_count ~ total_count + Litter_type * Ecosystem,
-            data = count_summary %>% filter(total_count > 1000))
-summary(model)
 ```
 
 ### Relative abundance plots (taxa barplots)
@@ -471,6 +420,12 @@ ggsave(here::here("plots/taxa_barplots/taxabp_clades.png"),
 
 clades_bp_df |> group_by(clade) |> summarise(meanRA = mean(Abundance) * 100)
 
+```
+
+
+**For the next plots below, the count table was rarefied to 1900 sequences per sample.**
+
+```{r taxa-barplots-subclade, echo=FALSE, fig.height=14, fig.width=30, message=FALSE, warning=FALSE, results='hold'}
 #### get top 25 strains ####
 top25names <- names(sort(taxa_sums(mg_rar), decreasing = T)[1:100])
 top25 <- as.data.frame(tax) |>
@@ -591,12 +546,12 @@ ggsave(here::here("plots/taxa_barplots/taxabp_subclades.png"),
        width = 260, height = 130, units = "mm", dpi = 300)
 ```
 
-**For the next plots below, the count table was rarefied to 1900 sequences per sample.**
 
 ```{r save-rds, include=FALSE}
 saveRDS(count_summary,      here::here("results/rds/count_summary.rds"))
 saveRDS(clim_vars_PC,       here::here("results/rds/clim_vars_PC.rds"))
 saveRDS(litter_vars,        here::here("results/rds/litter_vars.rds"))
+saveRDS(plots_rf_ra,        here::here("results/rds/plots_rf_ra.rds"))
 saveRDS(pcadf_expanded,     here::here("results/rds/pcadf_expanded.rds"))
 saveRDS(subclades_bp_df,    here::here("results/rds/subclades_bp_df.rds"))
 saveRDS(subclade_colors_bp, here::here("results/rds/subclade_colors_bp.rds"))
