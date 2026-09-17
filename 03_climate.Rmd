@@ -68,7 +68,7 @@ reserve_key_cols <- setNames(ecosystem_colors[sites_sf$Ecosystem], sites_sf$rese
 
 site_map <- ggplot() +
   geom_sf(data = california, fill = "grey97", colour = "grey55", linewidth = 0.3) +
-  geom_sf(data = sites_sf, aes(colour = Ecosystem), size = 3, alpha = 0.9) +
+  geom_sf(data = sites_sf, aes(colour = Ecosystem), size = 2, alpha = 0.9) +
   scale_colour_manual(values = ecosystem_colors, name = "Ecosystem") +
   # short codes on the map
   geom_text_repel(data = sites_sf, aes(geometry = geometry, label = CodeName),
@@ -79,14 +79,14 @@ site_map <- ggplot() +
   labs(x = NULL, y = NULL) +
   theme_minimal(base_size = 11) +
   theme(panel.grid = element_line(colour = "grey92"),
-        legend.text = element_text(size = 7),
+        legend.text = element_text(size = 9),
         legend.key.size = unit(0.35, "cm"),
         legend.position = "inside",
-        legend.position.inside = c(0.95, 0.85))
+        legend.position.inside = c(0.85, 0.8))
 site_map
 
 ggsave(here::here("plots/site_map_california.png"), site_map,
-       width = 7, height = 7, dpi = 300, bg = "white")
+       width = 90, height = 90, dpi = 300, bg = "white", units = "mm")
 ```
 
 ##### Climate data analysis
