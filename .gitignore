@@ -73,6 +73,11 @@ results/synth_fig/
 12_gdm.Rmd
 13_reserves_rts.Rmd
 
+# ── Posit Assistant (local project memory / config) ───────────────────────────
+AGENTS.md
+.posit/
+DATA_DICTIONARY.md
+
 # ── Office files ──────────────────────────────────────────────────────────────
 *.pptx
 *.xlsm
