@@ -36,6 +36,7 @@ metadata <- readRDS(here::here("results/rds/metadata_litter.rds"))
 pca_litt_df_md <- readRDS(here::here("results/rds/pca_litt_df_md.rds"))
 PCAloads_litt_md <- readRDS(here::here("results/rds/PCAloads_litt_md.rds"))
 reserve_codenames <- readRDS(here::here("results/rds/reserve_codenames.rds"))
+pca_litt_md <- readRDS(here::here("results/rds/pca_litt_md.rds"))
 ```
 
 ##### Site map
@@ -221,6 +222,21 @@ ggarrange(pca_contributions_plot, pca_litt_contributions_plot_md,
           ncol = 2, common.legend = F, labels = "AUTO")
 ggsave(here::here("plots/PCAs/clim&litter_PCA_contributions.png"),
        width = 240, height = 130, units = "mm", dpi = 300, bg = "white")
+```
+
+###### Combined site map + PCAs
+
+```{r map-pca-combined}
+map_pca_combined <- ggarrange(
+  site_map,
+  ggarrange(pca_plot + theme(legend.position = "none"),
+            pca_plot_litt_md, ncol = 2, labels = c("B", "C")),
+  nrow = 2, heights = c(0.8, 1), labels = "A"
+)
+map_pca_combined
+
+ggsave(here::here("plots/site_map_clim&litter_PCA.png"), map_pca_combined,
+       width = 280, height = 240, units = "mm", dpi = 300, bg = "white")
 ```
 
 ```{r save-rds, include=FALSE}

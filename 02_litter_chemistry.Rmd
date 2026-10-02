@@ -235,4 +235,5 @@ saveRDS(litter_md,  here::here("results/rds/litter_md.rds"))
 saveRDS(pca_litt_df_md, here::here("results/rds/pca_litt_df_md.rds"))
 saveRDS(PCAloads_litt_md, here::here("results/rds/PCAloads_litt_md.rds"))
 saveRDS(pca_litt_df, here::here("results/rds/pca_litt_df.rds"))
+saveRDS(pca_litt_md, here::here("results/rds/pca_litt_md.rds"))
 ```
