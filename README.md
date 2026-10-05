@@ -21,6 +21,19 @@ Scripts are numbered and intended to be run in order:
 
 Utility functions shared across scripts live in `R/`.
 
+## Upstream processing (`process_executables/`)
+
+SLURM scripts (UCI HPC3) that turn raw metagenomic reads into the R-pipeline inputs. Run in order with `sbatch`; set `--array` to the number of samples. Paths, account and e-mail are cluster-specific and must be edited before reuse.
+
+| Step | Script | What it does | Output |
+|------|--------|--------------|--------|
+| 1 | `1_qc_filter_euk.sh` | BBduk adapter/quality trimming; remove plant (*Lolium perenne*) and fungal (*Pyrenophora teres*) reads with BWA; merge pairs with BBMerge | `<sample>.filter.total.fa` |
+| 2 | `2_blastp.sh` | `hs-blastn` of reads against the *Curtobacterium* core-gene database (e-value 1e-50, best hit) | `<sample>.blast.txt` |
+| 3 | `3_parse_blast_array.sh` | Count hits per reference genome per sample, zeros filled in | `count_table.txt` (read by `01_load_data.Rmd`) |
+| 4 | `4_Kraken_Bracken_compile.sh` | Kraken2 + Bracken (genus level) against a GTDB-based database | Bracken tables, compiled into `GTDB_genus_abundance_table.tsv` (read by `05_relative_abundance.Rmd`) |
+
+Steps 2–3 (BLAST counts) and step 4 (Kraken/Bracken) are independent branches that both start from step 1. Superseded or auxiliary scripts are kept in `process_executables/unused/`. Requires BBMap, BWA, samtools, hs-blastn, Kraken2 2.1.2, Bracken 2.6.2.
+
 ## Data requirements
 
 The following **raw data files** must be present to run scripts 01–10. All paths

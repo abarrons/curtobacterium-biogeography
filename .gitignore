@@ -46,7 +46,6 @@ DistLM_clades_AIC_Best.txt
 DistLM_marginal_tests.xlsx
 
 # ── Sequencing / lab process files (not part of R pipeline) ───────────────────
-process_executables/
 filtered_seqs_counts.txt
 seqIDs_bc.txt
 all_sequencied._samples.txt
